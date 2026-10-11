@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>影视服 MediaDock</title>
+  <rect width="64" height="64" rx="14" fill="#101311"/>
+  <g fill="#ded0a3">
+    <path d="M15 27 23 25V51L15 53Z"/>
+    <path d="M28 20 36 18V51L28 53Z"/>
+    <path d="M41 13 49 11V51L41 53Z"/>
+  </g>
+</svg>

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "nextemby_base_url": "https://nextemby.example.com",
+  "cards_per_order": 1,
+  "expected_order_quantity": 1,
+  "xianyu_listing_title": "MediaDock example media service",
+  "products": [
+    {
+      "id": "svip_annual",
+      "name": "Self-hosted storage annual",
+      "template_name": "SVIP",
+      "duration_days": 365,
+      "delivery_mode": "own_115",
+      "requires_own_115": true,
+      "xianyu_item_id": null,
+      "xianyu_sku_id": null,
+      "xianyu_spec_name": "option",
+      "xianyu_spec_value": "Self-hosted storage annual",
+      "listed_price_cents": 0,
+      "enabled": false
+    },
+    {
+      "id": "vvip_annual",
+      "name": "Managed streaming annual",
+      "template_name": "VVIP",
+      "duration_days": 365,
+      "delivery_mode": "load_balanced",
+      "requires_own_115": false,
+      "xianyu_item_id": null,
+      "xianyu_sku_id": null,
+      "xianyu_spec_name": "option",
+      "xianyu_spec_value": "Managed streaming annual",
+      "listed_price_cents": 0,
+      "enabled": false
+    },
+    {
+      "id": "vip_trial",
+      "name": "Managed streaming trial",
+      "template_name": "VIP",
+      "duration_days": 1,
+      "delivery_mode": "load_balanced",
+      "requires_own_115": false,
+      "xianyu_item_id": null,
+      "xianyu_sku_id": null,
+      "xianyu_spec_name": "option",
+      "xianyu_spec_value": "Managed streaming trial",
+      "listed_price_cents": 0,
+      "enabled": false
+    },
+    {
+      "id": "free_trial",
+      "name": "Self-hosted storage trial",
+      "template_name": "free",
+      "duration_days": 1,
+      "delivery_mode": "own_115",
+      "requires_own_115": true,
+      "xianyu_item_id": null,
+      "xianyu_sku_id": null,
+      "xianyu_spec_name": "option",
+      "xianyu_spec_value": "Self-hosted storage trial",
+      "listed_price_cents": 0,
+      "enabled": false
+    },
+    {
+      "id": "free_monthly",
+      "name": "Self-hosted storage monthly",
+      "template_name": "free",
+      "duration_days": 30,
+      "delivery_mode": "own_115",
+      "requires_own_115": true,
+      "xianyu_item_id": null,
+      "xianyu_sku_id": null,
+      "xianyu_spec_name": "option",
+      "xianyu_spec_value": "Self-hosted storage monthly",
+      "listed_price_cents": 0,
+      "enabled": false
+    }
+  ]
+}

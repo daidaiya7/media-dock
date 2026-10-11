@@ -1,0 +1,20 @@
+[Unit]
+Description=MediaDock private HTTP, ICMP and probe availability sampling
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=mediadock
+Group=mediadock
+Environment=PYTHONPATH=/opt/mediadock/app/portal
+ExecStart=/opt/mediadock/venv/bin/python /opt/mediadock/app/portal/network_monitor.py
+TimeoutStartSec=35s
+UMask=0077
+NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mediadock
