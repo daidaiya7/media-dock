@@ -93,3 +93,7 @@ Compose 通常为卷名称添加项目名前缀。迁移时同时保留两个卷
 保留了 [Apache License 2.0](LICENSE) 和 [上游声明](NOTICE)。历史项目涉及 [Christ9038/Ydisks-Xianyu-Helper](https://github.com/Christ9038/Ydisks-Xianyu-Helper)，本整理版保留闲鱼与小红书渠道适配代码，但不包含原账号、商品、代理、凭据或生产部署。依赖软件各自的许可证继续适用。
 
 私有仓库不代表可以取消上游已有的许可证权利。公开分发或签署商业授权前，应明确自己新增代码的授权范围，并核实随镜像分发的依赖许可；此处不把上游代码宣称为独占私有代码。
+
+## Version
+
+Current release: `1.0.0`.
