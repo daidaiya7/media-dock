@@ -1,68 +1,41 @@
-# 私有仓库与镜像分发
+# 源码私有与镜像发行
 
-## 推荐方式
+源码保存在 `daidaiya7/media-dock` 私有仓库。公开的 `daidaiya7/media-dock-release` 只包含介绍、部署模板、安装脚本和使用文档；每位部署者使用自己的数据卷、凭据、账号及媒体服务。
 
-源码仅保存在 GitHub Private 仓库。向朋友提供 `compose.yaml`、`.env.example`、必要使用文档和私有容器镜像的读取权限，每个人独立部署自己的数据卷、凭据、媒体服务和域名。这样不需要把当前站点的数据库、订单或 Token 发给别人。
+## 1.1.0 发行内容
 
-朋友仍然可以提取镜像中的文件。本版本使用 Python，容器内包含可读取的程序文件；如果“朋友不能拿到实现”是硬性要求，应选择由你托管服务，或把真正需要保密的逻辑保留在你控制的 API 中。前端压缩、关闭 source map、编译 Python 或代码混淆都无法提供绝对防逆向保证。
+- 容器地址：`ghcr.io/daidaiya7/mediadock:1.1.0`，包含 Linux AMD64、ARM64 架构。
+- 公开发行页附带同版本离线镜像，可用 `docker load` 导入。
+- `Dockerfile.release` 在构建阶段用 Cython 将后端模块编译为本机扩展；最终阶段只接收编译产物、必要静态资源、运行依赖及许可声明。
+- `scheduler.py` 与 `save_secret.py` 仅是加载编译模块的简短入口，业务逻辑不以应用 `.py` 明文分发。
+- 现有 `Dockerfile` 保留用于私有开发调试，不应用它构建公开发行镜像。
 
-## 首次保存到 GitHub
+镜像和前端程序仍可被分析，编译不代表加密或绝对防逆向。真正必须保密的逻辑应保留在维护者控制的服务端。
 
-先在 GitHub 创建一个**空的 Private 仓库**，名称建议 `media-dock`。在本整理目录运行：
-
-```sh
-git init -b main
-git add .
-git diff --cached --stat
-git diff --cached
-git commit -m "Prepare MediaDock private distribution"
-git remote add origin git@github.com:YOUR_ACCOUNT/media-dock.git
-git push -u origin main
-```
-
-将 `YOUR_ACCOUNT` 替换为自己的账号。提交前检查待提交文件，不要加入 `.env`、备份、Docker 卷、运行日志或任何真实凭据。此流程使用全新历史；原项目的 `.git` 不应复制进来。
-
-## 构建朋友可用的镜像
-
-在支持 Docker Buildx 的构建机上，登录私有镜像仓库后发布明确版本：
+## 构建验证
 
 ```sh
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --tag ghcr.io/YOUR_ACCOUNT/media-dock:1.0.0 \
-  --push .
+docker build -f Dockerfile.release \
+  --build-arg VERSION=1.1.0 --build-arg REVISION="$(git rev-parse HEAD)" \
+  -t mediadock:release-1.1.0 .
 ```
 
-需要构建器支持对应架构；两种架构应分别完成启动和业务验证后再宣布支持。镜像推送后确认 GHCR 包可见性为 Private，并仅为朋友授予包读取权限。GHCR 权限可能默认继承关联仓库；若要只给镜像访问而不开放源码，应在包设置中检查并调整继承关系与访问权限。
+独立的 `Dockerfile.release.dockerignore` 控制构建上下文。构建时检查最终应用文件清单，并验证编译模块导入、管理员初始化/登录、访问限制、外观与教程配置、图片上传和定时任务入口。
 
-不要给朋友你的个人管理 Token。每位朋友使用自己的 GitHub 账号及最小范围的读取凭据登录，或改用支持独立拉取凭据的私有镜像仓库。登录凭据交给 Docker 凭据存储，不放进 Compose、README 或 Git。
+GitHub Actions 的 `Build release images` 工作流在两个架构的原生 runner 上构建，使用非 root / 只读容器复验并启动独立 Compose 环境，成功后推送架构镜像并组合多架构清单。离线镜像与校验值作为短期构建产物保存，检查后上传公开发行页。
 
-## 朋友部署
+不要发布 `compile` 构建阶段，或向公开缓存导出 `mode=max`：它们可能包含源文件。公开镜像与发行包不得加入实例 `.env`、订单、缓存、日志、秘密目录或生产图片。
 
-只需提供部署文件和文档，不必克隆源码。朋友登录镜像仓库后，将 `.env` 中的镜像名改为你发布的版本：
+## 镜像与源码权限
 
-```dotenv
-MEDIADOCK_IMAGE=ghcr.io/YOUR_ACCOUNT/media-dock:1.0.0
-```
+首次创建 GHCR 包后检查包可见性。匿名分发镜像需要将容器包设为 Public；源码仓库继续保持 Private。镜像中不存储拉取 Token 或共享管理凭据。发布完成后，以未登录环境执行拉取或检查清单，并测试公开发行页下载的真实安装包。
 
-```sh
-cp .env.example .env
-# 编辑 .env，填写镜像名；先保留本机访问设置完成初始化。
-docker compose pull
-docker compose up -d
-docker compose ps
-```
+## 升级和回滚
 
-先通过 `http://127.0.0.1:59189/admin` 设置密码，再按 README 配置 HTTPS 入口和自己的上游服务。正式使用建议固定镜像摘要，避免同名标签被覆盖后未经评估升级。
+为每次发行保留明确版本及镜像摘要，不依赖 `latest` 追踪生产更新。升级前备份数据卷与秘密卷，保留原 Compose 项目名和 `.env`。不要执行 `docker compose down -v`。
 
-无法提供镜像仓库时，也可以用 `docker save` 导出某个架构的镜像，朋友用 `docker load` 导入，再通过 Compose 部署。离线镜像仍包含实现文件，同样不能保密。
+回滚通常只需要恢复之前的 `MEDIADOCK_IMAGE` 并重新启动；若后续版本包含数据库迁移，应按该版本说明恢复配套备份。1.1.0 的新增外观和教程配置兼容原有数据，不迁移或删除订单。
 
-## 当前保护边界
+## 许可与边界
 
-- 私有仓库限制源码的直接获取范围；管理好协作者、访问令牌和构建日志。
-- 镜像不嵌入真实凭据，数据与密钥挂载到独立卷；不同实例不共用生产 Token。
-- 容器使用非 root 用户、只读根文件系统、移除 capabilities，并默认只监听宿主机回环端口。
-- 当前没有商业许可证校验、设备绑定、授权服务器或自动停用功能。隐藏后台路径也不能代替身份认证。
-- 任何上游许可证权利仍然有效，不能用私有仓库设置或新增条款取消第三方已有授权。
-
-如未来需要正式商业分发，可再设计版本签名、授权服务和升级流程。应先确定在线依赖、离线宽限期、隐私范围与故障行为，避免授权服务故障影响正常使用。
+保留上游 Apache 2.0 许可证与来源声明，以及运行依赖的许可证。源码仓库私有不能取消上游已经授予的权利。当前没有设备绑定、在线激活、商业许可证校验或自动停用服务。

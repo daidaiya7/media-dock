@@ -24,3 +24,7 @@ backups/
 *.zip
 coverage/
 .pytest_cache/
+
+# Local compiled-release verification artifacts
+build/
+*.so
