@@ -6,17 +6,17 @@
   })[character]);
 
   function userCenterLink(value) {
-    if (typeof value !== 'string' || value.length > 2048 || /[\s\u0000-\u001f\u007f]/.test(value)) return '用户中心';
+    if (typeof value !== 'string' || value.length > 2048 || /[\s\u0000-\u001f\u007f]/.test(value)) return '<span>用户中心</span>';
     try {
       const url = new URL(value);
-      if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) return '用户中心';
+      if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) return '<span>用户中心</span>';
       return `<a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">用户中心<span aria-hidden="true"> ↗</span></a>`;
     } catch {
-      return '用户中心';
+      return '<span>用户中心</span>';
     }
   }
 
-  function markup({userCenterUrl} = {}) {
+  function defaultMarkup({userCenterUrl} = {}) {
     const center = userCenterLink(userCenterUrl);
     return `<main class="guide-content" id="guide-top">
       <header class="guide-heading">
@@ -75,5 +75,56 @@
     </main>`;
   }
 
-  window.MediaDockGuide = Object.freeze({markup});
+  const groupNames = {
+    heading: '页面标题与说明', library: '片库预览与求片订阅', plans: '选择合适的套餐',
+    purchase: '下单与付款', claim: '领取与兑换卡密', client: '推荐软件与连接图解',
+    status: '看懂服务状态', faq: '常见问题'
+  };
+
+  function editableNodes(root, key) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const result = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!node.textContent.trim() || node.parentElement.closest('.eyebrow,.guide-section-label,[aria-hidden],.visually-hidden,.guide-source-link,.guide-heading-actions')) continue;
+      const labels = {H1:'页面标题', H2:'章节标题', H3:'小标题', SUMMARY:'展开项标题', DT:'项目名称', DD:'项目说明', TH:'表格标题', TD:'表格内容', FIGCAPTION:'图片说明', LI:'步骤说明', STRONG:'重点文字', A:'链接文字', CODE:'地址示例'};
+      result.push({key: key + '-t' + result.length, node, label: labels[node.parentElement.tagName] || '正文', defaultValue: node.textContent.trim()});
+    }
+    return result;
+  }
+
+  function guideDocument(options = {}) {
+    const template = document.createElement('template');
+    template.innerHTML = defaultMarkup(options);
+    return template;
+  }
+
+  function editableGroups() {
+    const template = guideDocument();
+    return Object.entries(groupNames).map(([id, title]) => {
+      const root = template.content.querySelector(id === 'heading' ? '.guide-heading' : '#guide-' + id);
+      return {id, title, fields: editableNodes(root, id).map(({key, label, defaultValue}) => ({key, label, defaultValue}))};
+    });
+  }
+
+  function markup(options = {}) {
+    const template = guideDocument(options);
+    const texts = options.guide?.texts;
+    if (texts && typeof texts === 'object' && !Array.isArray(texts)) {
+      Object.keys(groupNames).forEach(id => {
+        const root = template.content.querySelector(id === 'heading' ? '.guide-heading' : '#guide-' + id);
+        editableNodes(root, id).forEach(({key, node}) => {
+          if (Object.prototype.hasOwnProperty.call(texts, key) && typeof texts[key] === 'string') node.textContent = texts[key];
+        });
+      });
+    }
+    Object.keys(groupNames).filter(id => id !== 'heading').forEach(id => {
+      const heading = template.content.querySelector('#guide-' + id + '-title');
+      const link = template.content.querySelector('.guide-toc a[href="#guide-' + id + '"]');
+      if (heading && link) link.textContent = heading.textContent;
+    });
+    return template.innerHTML;
+  }
+
+  window.MediaDockGuide = Object.freeze({markup, editableGroups});
 }());

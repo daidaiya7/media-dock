@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+# Private build stage only: never publish this stage or a maximal build cache.
+FROM python:3.12-slim AS compile
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    CFLAGS="-O2 -g0 -ffile-prefix-map=/build=/app" \
+    LDFLAGS="-Wl,-s"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev binutils \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY scripts/release/requirements-build.txt /build/requirements-build.txt
+RUN pip install --no-cache-dir -r /build/requirements-build.txt
+COPY portal/requirements.txt /build/requirements.txt
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -r /build/requirements.txt
+COPY portal/*.py /build/portal/
+COPY scripts/release/build_extensions.py /build/build_extensions.py
+RUN python /build/build_extensions.py build_ext --build-lib /release/portal --build-temp /build/objects \
+    && find /release/portal -name '*.so' -exec strip --strip-unneeded {} +
+COPY portal/static/ /release/portal/static/
+COPY product-mapping.json LICENSE NOTICE VERSION /release/
+COPY entrypoint.sh /release/entrypoint.sh
+COPY scripts/release-smoke.py /build/release-smoke.py
+# Smoke tests use temporary directories. No test state or credentials enter /release.
+RUN /opt/venv/bin/python /build/release-smoke.py /release \
+    && chmod 0555 /release/entrypoint.sh
+
+FROM python:3.12-slim AS release
+ARG VERSION=unknown
+ARG REVISION=unknown
+LABEL org.opencontainers.image.title="MediaDock" \
+      org.opencontainers.image.description="影视服 · 观影服务平台" \
+      org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$REVISION
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    MEDIADOCK_DATA_DIR=/var/lib/mediadock/data \
+    MEDIADOCK_SECRETS_DIR=/var/lib/mediadock/secrets
+RUN groupadd --gid 10001 mediadock \
+    && useradd --uid 10001 --gid mediadock --no-create-home --shell /usr/sbin/nologin mediadock \
+    && mkdir -p /app /var/lib/mediadock/data /var/lib/mediadock/secrets \
+    && chown -R mediadock:mediadock /var/lib/mediadock \
+    && chmod 0700 /var/lib/mediadock/data /var/lib/mediadock/secrets
+COPY --from=compile /opt/venv /opt/venv
+COPY --from=compile /release/ /app/
+USER 10001:10001
+WORKDIR /app/portal
+EXPOSE 59189
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import json,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:59189/health',timeout=3); assert json.load(r)['status']=='ok'"
+ENTRYPOINT ["/app/entrypoint.sh"]

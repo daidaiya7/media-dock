@@ -248,3 +248,17 @@
 .purchase-review-reject{margin-top:24px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .purchase-review-status .inline-actions{flex-wrap:wrap}.purchase-review-status .key-value strong{overflow-wrap:anywhere;min-width:0}
 @media(max-width:600px){.purchase-modal{padding:25px 20px;max-height:calc(100dvh - 24px)}.purchase-modal h2{font-size:25px}.purchase-modal .eyebrow{font-size:9px;letter-spacing:2px}.purchase-modal .order-summary{margin:16px 0;padding:15px 0}.purchase-modal .order-summary h3{font-size:16px}.purchase-modal .order-summary strong{font-size:26px}.purchase-modes{margin-top:18px}.purchase-modal .btn-full{font-size:13px;min-height:46px}.purchase-review-status .inline-actions .btn{flex:1;white-space:nowrap}.purchase-review-status .key-value{gap:16px}}
+
+/* Keep panels mounted so category changes retain draft fields. */
+.settings-categories{max-width:1000px;min-width:0}
+.settings-category-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.settings-category-tabs button{border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);padding:11px 16px;min-height:44px;font:inherit;font-size:13px;cursor:pointer}
+.settings-category-tabs button[aria-selected="true"]{background:var(--gold);color:#17140b;border-color:var(--gold);font-weight:600}
+.settings-category-tabs button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+[data-settings-category][hidden]{display:none!important}
+[data-settings-category]>.panel:first-child{margin-top:0}
+@media(max-width:600px){.settings-category-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.settings-category-tabs button{padding:10px 7px;font-size:12px}}
+
+.brand-logo{width:40px;height:40px;object-fit:contain;border-radius:8px;flex-shrink:0}.brand-name{overflow-wrap:anywhere}.hero-custom-description{white-space:pre-line}.admin-theme-tools{display:flex;align-items:center;gap:16px}.site-nav{gap:20px}.site-header{gap:20px}.site-header>.brand{flex-shrink:0}@media(max-width:600px){.admin-theme-tools{gap:8px}.admin-theme-tools .workspace-pill{display:none}}
+
+.user-center-pending{padding:0;background:none;color:inherit;font:inherit;white-space:nowrap}.user-center-pending:hover{color:var(--gold)}.site-nav .user-center-link{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}

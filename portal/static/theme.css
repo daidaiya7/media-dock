@@ -1,0 +1,38 @@
+/* Loaded last: retain image contrast while adapting controls and reading surfaces. */
+.theme-switch{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;padding:0;border:1px solid transparent;border-radius:50%;background:transparent;color:var(--gold);cursor:pointer}.theme-switch:hover{background:var(--surface-2);border-color:var(--line)}.theme-switch:focus-visible{outline:2px solid var(--gold);outline-offset:3px}.theme-switch svg{pointer-events:none}
+:root[data-theme=light]{color-scheme:light;--bg:#f7f5ef;--surface:#ffffff;--surface-2:#f0ece3;--line:#cfc5b2;--line-soft:#e3dccf;--text:#28251f;--muted:#625c50;--dim:#756d5f;--gold:#846012;--gold-strong:#6c4c09;--green:#48642c;--red:#a13728;--amber:#825509;--shadow:0 25px 90px #5240201a}
+[data-theme=light] :is(.storefront-page,.status-page){--public-border:#d8cdb7;--public-muted:var(--muted)}
+[data-theme=light] :is(.btn-primary,.purchase-notice-tag,.settings-category-tabs button[aria-selected=true]){background:var(--gold);color:#fff}
+[data-theme=light] .btn-primary:hover:not(:disabled){background:var(--gold-strong)}
+[data-theme=light] :is(.btn-secondary,.segmented button.active,.admin-nav button.active,.order-channel-filters button.active,.purchase-modes button[aria-pressed=true],.delivery-channels button.active,.delivery-stages button.active,.xhs-tool-tabs button[aria-pressed=true],.xhs-conversation-item.active){background:var(--surface-2)}
+[data-theme=light] :is(.btn-secondary:hover:not(:disabled),.subscription-card-action:hover,.media-search>button:hover){background:#e8deca}
+[data-theme=light] :is(.product,.storefront-page .product,.claim-card,.network-cdn,.status-page .status-provider,.subscription-public){background:linear-gradient(145deg,#fff,#f1ecdf);border-color:var(--line)}
+[data-theme=light] :is(.sidebar,.network-monitor-card,.flow-item,.data-table th,.purchase-shop-link,.xhs-messages,.xhs-review-text){background:var(--surface)}
+[data-theme=light] .data-table tbody tr:hover{background:var(--surface-2)}
+[data-theme=light] :is(.features li,.field>span,.field-label,.data-table .order-name,.home-service-link h2,.status-guide h2,.status-guide dt,.network-monitor-card-heading h4,.network-node-copy strong){color:var(--text)}
+[data-theme=light] :is(.storefront-page .home-details,.storefront-page .carousel-count,.storefront-page .home-attribution,.storefront-page .home-attribution>small,.storefront-page .home-service-link>small,.storefront-page .home-service-link p,.storefront-page #plans .section-heading p,.storefront-page .shop-note,.status-page .status-provider p,.status-page .status-provider footer,.status-page .status-provider>:is(small,.network-label),.status-page .status-guide dd,.status-page .status-panel-head p,.status-page .network-node-copy small,.status-page .network-monitor-foot,.status-page .network-monitor-note,.status-page #network-status>.network-monitor-empty){color:var(--muted)}
+[data-theme=light] :is(.status-page .status-provider h2,.status-page .status-panel-head>button){color:var(--gold)}
+[data-theme=light] .status-page .network-monitor-card-heading{background:var(--surface-2)}
+[data-theme=light] :is(.storefront-page .home-actions .btn-outline,.storefront-page .carousel-arrow,.storefront-page .carousel-pause){background:var(--surface);border-color:var(--line)}
+[data-theme=light] :is(.storefront-page .carousel-arrow:hover,.storefront-page .carousel-pause:hover){background:var(--surface-2)}
+[data-theme=light] .text-link:hover{color:var(--gold-strong)}
+[data-theme=light] .pill.managed{color:#4b5e72;border-color:#b4c2d0;background:#eaf0f6}
+[data-theme=light] .callout.success{color:#405f31;background:#edf4e8;border-color:#b2c4a2}
+[data-theme=light] :is(.callout.danger,.btn-danger){color:#953a2b;background:#f9eae4;border-color:#d8b6a9}
+[data-theme=light] .badge{color:#6d5319;background:#eee3c9}
+[data-theme=light] .badge.green{color:#41662c;background:#e6f0df}
+[data-theme=light] .badge.red{color:#943b2c;background:#f6e5de}
+[data-theme=light] .badge.gray{color:#625c52;background:#e9e5de}
+[data-theme=light] .badge.blue{color:#325a71;background:#e1edf3}
+[data-theme=light] .badge-count{color:#7b4e25;background:#eee0cc}
+[data-theme=light] .overlay{background:#30271980}
+[data-theme=light] .subscription-modal{background:#30271980}
+[data-theme=light] .guide-page .guide-table thead th{background:var(--surface-2)}
+[data-theme=light] .auth-story{background:radial-gradient(ellipse at 15% 100%,#e4d3af,#f2ead9 65%,#fcfaf4)}
+[data-theme=light] .auth-story p{color:var(--muted)}
+[data-theme=light] .auth-story-footer{color:var(--dim)}
+[data-theme=light] .xhs-account-icon{background:var(--surface-2)}
+[data-theme=light] .xhs-avatar{background:#e6dfcf;color:var(--text)}
+[data-theme=light] .xhs-message-text,[data-theme=light] .xhs-message.unknown .xhs-message-text{background:var(--surface-2)}
+[data-theme=light] .xhs-message.outgoing .xhs-message-text{background:#ede0bf;border-color:#d4bf8c;color:var(--text)}
+@media(max-width:650px){.theme-switch select{min-height:38px;max-width:118px}.site-header .theme-switch{flex-shrink:0}}

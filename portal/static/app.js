@@ -2,7 +2,7 @@
 'use strict';
 const app = document.getElementById('app');
 const modalRoot = document.getElementById('modal-root');
-const state = { catalog: null, overview: null, tab: 'overview', filter: 'all', search: '', status: '', orderSource: 'all', orderGroupsExpanded: false, deliverySource: 'all', deliveryView: 'queue', deliveryStage: 'all', deliverySearch: '', auth: null, bridgeConfig: null, modalReturnFocus: null };
+const state = { catalog: null, overview: null, tab: 'overview', settingsCategory: 'site', filter: 'all', search: '', status: '', orderSource: 'all', orderGroupsExpanded: false, deliverySource: 'all', deliveryView: 'queue', deliveryStage: 'all', deliverySearch: '', auth: null, bridgeConfig: null, modalReturnFocus: null, appearance: null };
 let publicOrderGeneration = 0;
 const XIAN_YU_URL = '';
 function configureCustomerBridge(catalog) {
@@ -26,7 +26,34 @@ const paths = {
   link:'M10 13a5 5 0 0 0 7 0l4-4a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-4 4a5 5 0 0 0 7 7l2-2', film:'M3 3h18v18H3zM7 3v18M17 3v18M3 8h4m-4 8h4M17 8h4m-4 8h4',
 };
 const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.info}"/></svg>`;
-const brand = () => `<span class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-name">影视服<small>MediaDock</small></span></span>`;
+const appearanceDefaults = {site_name:'影视服',site_subtitle:'MediaDock',site_description:'观影服务平台',logo_url:'',favicon_url:'',hero_eyebrow:'A LITTLE LIGHT. A WORLD OF STORIES.',hero_title:'把好电影，',hero_highlight:'留给每个夜晚。',hero_description:'让喧嚣留在门外，让故事照亮生活。\n从一场电影开始，拥有属于你的光影时刻。',footer_text:'让好影像融入生活',hero_images:[],theme_mode:'auto',day_start:'07:00',night_start:'19:00'};
+const appearance = () => ({...appearanceDefaults,...state.appearance});
+function decorationImage(value) {
+  if(typeof value!=='string' || [...value].some(c=>c.trim()==='' || c.charCodeAt(0)===92))return '';
+  if(/^\/(?:static\/|api\/public\/appearance-assets\/)/.test(value) && !value.includes('..'))return value;
+  try {const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password?url.href:'';}catch{return '';}
+}
+function brand() {
+  const a=appearance(),logo=decorationImage(a.logo_url);
+  return `<span class="brand">${logo?`<img class="brand-logo" src="${esc(logo)}" alt="" width="40" height="40" referrerpolicy="no-referrer">`:'<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>'}<span class="brand-name">${esc(a.site_name)}<small>${esc(a.site_subtitle)}</small></span></span>`;
+}
+function applyAppearance(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value))return;
+  state.appearance={...appearanceDefaults,...value};
+  const a=appearance(),favicon=document.querySelector('link[rel="icon"]');
+  if(favicon){favicon.href=decorationImage(a.favicon_url)||'/static/favicon.svg';favicon.removeAttribute('type');}
+  document.querySelector('meta[name="description"]')?.setAttribute('content',a.site_description);
+  window.MediaDockTheme?.configure(a);
+  document.querySelectorAll('.brand').forEach(element=>{element.outerHTML=brand();});
+  updateSiteTitle();
+}
+function updateSiteTitle() {
+  const a=appearance(),path=location.pathname;
+  const labels={'/plans':'观影套餐','/library':'影视库','/discover':'订阅找片','/guide':'使用教程','/status':'服务状态','/claim':'领取卡密'};
+  const label=path.startsWith('/admin')?'管理控制台':labels[path];
+  document.title=label?label+' · '+a.site_name:a.site_name+' · '+a.site_description;
+}
+async function loadAppearance(){try{applyAppearance(await api('/api/public/appearance',{timeout:5000}));}catch{window.MediaDockTheme?.configure(appearance());}}
 function safeUrl(value, { local = false } = {}) {
   if (!value) return '';
   try { const url = new URL(value, location.origin); return ['https:', 'http:'].includes(url.protocol) && (!local || url.origin === location.origin || url.protocol === 'https:') ? url.href : ''; } catch { return ''; }
@@ -42,7 +69,7 @@ async function api(path, options = {}) {
       const failure = new Error(data.error?.message || data.detail?.message || (typeof data.detail === 'string' ? data.detail : `请求未完成（${response.status}）`));
       failure.status = response.status; failure.code = data.error?.code; throw failure;
     }
-    if (path === '/api/public/catalog') configureCustomerBridge(data);
+    if (path === '/api/public/catalog') {configureCustomerBridge(data);applyAppearance(data.appearance);}
     return data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('请求等待超时，请刷新订单状态后再操作；不要重复生成卡密。');
@@ -82,15 +109,15 @@ const productTitle = product => product.duration_days === 1 ? (own(product) ? '�
 const productDescription = product => own(product) ? '自备 115 网盘，连接你的影视时光' : '无需自备网盘，使用负载均衡模式';
 const durationLabel = product => `${product.duration_days} 天`;
 function userCenterLink(label = '用户中心', className = '') {
-  const url = safeUrl(state.catalog?.redemption_url);
-  return url ? `<a class="${esc(className)}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ${icon('external',13)}</a>` : '';
+  const url = safeUrl(state.catalog?.redemption_url || state.catalog?.customer_center_url);
+  return url ? `<a class="${esc(className)}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ${icon('external',13)}</a>` : `<button type="button" class="user-center-pending" data-action="user-center-unconfigured">${esc(label)}</button>`;
 }
 function xianyuLink(label = '闲鱼店铺') {
   const url = safeUrl(state.catalog?.xianyu_store_url);
   return url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ${icon('external',13)}</a>` : '';
 }
-function header(active = '') { return `<header class="site-header"><a href="/" aria-label="影视服首页">${brand()}</a><nav class="site-nav" aria-label="主导航"><a class="${active === 'shop' ? 'active' : ''}" href="/">首页</a><a class="${active === 'plans' ? 'active' : ''}" href="/plans">观影套餐</a><a class="${active === 'library' ? 'active' : ''}" href="/library">影视库</a><a class="${active === 'discovery' ? 'active' : ''}" href="/discover">订阅找片</a><a class="${active === 'status' ? 'active' : ''}" href="/status">服务状态</a><a class="${active === 'guide' ? 'active' : ''}" href="/guide">使用教程</a><a class="${active === 'claim' ? 'active' : ''}" href="/claim">领取卡密</a>${userCenterLink('用户中心','desktop-link')}</nav></header>`; }
-function footer() { return `<footer class="site-footer"><span>© ${new Date().getFullYear()} MediaDock 影视服 · 让好影像融入生活</span><div class="footer-links"><button type="button" class="footer-intro-link" data-action="show-introduction">${esc(state.catalog?.introduction?.entry_label || '影视服简介')}</button><a href="/plans">观影套餐</a><a href="/library">影视库</a><a href="/discover">订阅找片</a><a href="/status">服务状态</a><a href="/guide">使用教程</a><a href="/claim">领取卡密</a>${userCenterLink()}${xianyuLink()}${['127.0.0.1','localhost'].includes(location.hostname) ? `<a href="/admin">管理入口 ${icon('arrow',12)}</a>` : ''}</div></footer>`; }
+function header(active = '') { return `<header class="site-header"><a href="/" aria-label="${esc(appearance().site_name)}首页">${brand()}</a><nav class="site-nav" aria-label="主导航"><a class="${active === 'shop' ? 'active' : ''}" href="/">首页</a><a class="${active === 'plans' ? 'active' : ''}" href="/plans">观影套餐</a><a class="${active === 'library' ? 'active' : ''}" href="/library">影视库</a><a class="${active === 'discovery' ? 'active' : ''}" href="/discover">订阅找片</a><a class="${active === 'status' ? 'active' : ''}" href="/status">服务状态</a><a class="${active === 'guide' ? 'active' : ''}" href="/guide">使用教程</a><a class="${active === 'claim' ? 'active' : ''}" href="/claim">领取卡密</a>${userCenterLink('用户中心','user-center-link')}${window.MediaDockTheme?.control()||''}</nav></header>`; }
+function footer() { return `<footer class="site-footer"><span>© ${new Date().getFullYear()} ${esc(appearance().site_subtitle)} ${esc(appearance().site_name)} · ${esc(appearance().footer_text)}</span><div class="footer-links"><button type="button" class="footer-intro-link" data-action="show-introduction">${esc(state.catalog?.introduction?.entry_label || appearance().site_name+'简介')}</button><a href="/plans">观影套餐</a><a href="/library">影视库</a><a href="/discover">订阅找片</a><a href="/status">服务状态</a><a href="/guide">使用教程</a><a href="/claim">领取卡密</a>${userCenterLink()}${xianyuLink()}${['127.0.0.1','localhost'].includes(location.hostname) ? `<a href="/admin">管理入口 ${icon('arrow',12)}</a>` : ''}</div></footer>`; }
 const DEFAULT_INTRODUCTION = {"entry_label": "影视服简介", "enabled": true, "title": "影视服 · 观影服务平台", "subtitle": "统一浏览片库、选择套餐、领取卡密与查看服务状态。", "sections": [{"title": "统一观影入口", "body": "通过一个网站浏览已开放片库、搜索影片并提交求片申请。实际片库、线路与可用功能以部署方配置为准。"}, {"title": "套餐与卡密交付", "body": "选择适合自己的套餐，按页面指引完成购买与领取。请妥善保管领取链接，持有链接的人可能查看对应卡密。"}, {"title": "购买必看！先查片库，再决定购买", "body": "只是查看片库有没有想看的电影或剧集，直接搜索即可，无需购买试用卡或天卡。试用卡适合测试实际播放速度、流畅度和客户端体验。"}]};
 const INTRO_SEEN_KEY = 'mediadock-introduction-seen';
 let announcementSeen = false;
@@ -348,10 +375,10 @@ function homeCarouselMarkup(slides=[], featured=true) {
   return `<div class="hero-deck">${slides.map((slide,index)=>{
     const backdrop=featured && /^\/api\/public\/featured-images\/[a-f0-9]{64}\.(?:jpg|png|webp)$/.test(slide.backdrop_url||'') ? slide.backdrop_url : '';
     const artwork=backdrop?'backdrop':featured?'poster':'local';
-    return `<article class="hero-slide" data-artwork="${artwork}" data-carousel-slide data-position="${index===0?'active':index===1?'next':index===slides.length-1?'previous':'hidden'}" aria-roledescription="幻灯片" aria-label="${index+1} / ${slides.length}" aria-hidden="${index!==0}" ${index?'inert':''}><img class="hero-slide-image" src="${esc(backdrop||slide.poster_url)}" alt="${featured?esc(slide.title)+(backdrop?' 剧照':' 海报'):esc(slide.title)+' · 影视服影院'}" width="${artwork==='poster'?600:1280}" height="${artwork==='poster'?900:720}" decoding="async" ${index?'loading="lazy"':'fetchpriority="high"'} referrerpolicy="no-referrer"><div class="hero-slide-caption"><span class="hero-slide-kicker">${featured?`本周热门 · ${String(index+1).padStart(2,'0')}`:esc(slide.kicker)}</span><h2>${esc(slide.title)}</h2><p>${featured?'发现一部好电影':esc(slide.description)}</p></div></article>`;}).join('')}</div><div class="hero-carousel-controls"><button type="button" class="carousel-arrow" data-carousel-prev aria-label="上一张">←</button><div class="carousel-dots" role="group" aria-label="选择轮播内容">${slides.map((_,index)=>`<button type="button" data-carousel-dot="${index}" class="${index===0?'is-active':''}" aria-label="切换到第 ${index+1} 张" aria-pressed="${index===0}"></button>`).join('')}</div><span class="carousel-count">01 / ${String(slides.length).padStart(2,'0')}</span><button type="button" class="carousel-arrow" data-carousel-next aria-label="下一张">→</button><button type="button" class="carousel-pause" data-carousel-pause aria-label="暂停轮播">暂停轮播</button></div>`;
+    return `<article class="hero-slide" data-artwork="${artwork}" data-carousel-slide data-position="${index===0?'active':index===1?'next':index===slides.length-1?'previous':'hidden'}" aria-roledescription="幻灯片" aria-label="${index+1} / ${slides.length}" aria-hidden="${index!==0}" ${index?'inert':''}><img class="hero-slide-image" src="${esc(backdrop||slide.poster_url)}" alt="${esc(featured?slide.title+(backdrop?' 剧照':' 海报'):slide.title+' · '+appearance().site_name)}" width="${artwork==='poster'?600:1280}" height="${artwork==='poster'?900:720}" decoding="async" ${index?'loading="lazy"':'fetchpriority="high"'} referrerpolicy="no-referrer"><div class="hero-slide-caption"><span class="hero-slide-kicker">${featured?`本周热门 · ${String(index+1).padStart(2,'0')}`:esc(slide.kicker)}</span><h2>${esc(slide.title)}</h2><p>${featured?'发现一部好电影':esc(slide.description)}</p></div></article>`;}).join('')}</div><div class="hero-carousel-controls"><button type="button" class="carousel-arrow" data-carousel-prev aria-label="上一张">←</button><div class="carousel-dots" role="group" aria-label="选择轮播内容">${slides.map((_,index)=>`<button type="button" data-carousel-dot="${index}" class="${index===0?'is-active':''}" aria-label="切换到第 ${index+1} 张" aria-pressed="${index===0}"></button>`).join('')}</div><span class="carousel-count">01 / ${String(slides.length).padStart(2,'0')}</span><button type="button" class="carousel-arrow" data-carousel-next aria-label="下一张">→</button><button type="button" class="carousel-pause" data-carousel-pause aria-label="暂停轮播">暂停轮播</button></div>`;
 }
 function homeHero() {
-  return `<section class="home-hero" aria-labelledby="home-title"><div class="home-hero-copy"><div class="eyebrow">A LITTLE LIGHT. A WORLD OF STORIES.</div><h1 id="home-title">把好电影，<br><span>留给每个夜晚。</span></h1><p class="hero-copy">让喧嚣留在门外，让故事照亮生活。<br>从一场电影开始，拥有属于你的光影时刻。</p><div class="home-actions"><a class="btn btn-primary" href="/plans">探索观影套餐 ${icon('arrow',17)}</a><a class="btn btn-outline" href="/library">逛逛影视库 ${icon('film',16)}</a></div><div class="home-details"><span>原盘 · RE / REMUX</span><span>多线路支持</span><span>自备网盘 / 免网盘</span></div></div><div class="home-hero-visual"><div id="home-carousel" class="hero-carousel" role="region" aria-roledescription="轮播" aria-label="影视服光影轮播" tabindex="0">${homeCarouselMarkup()}</div></div></section>`;
+  return `<section class="home-hero" aria-labelledby="home-title"><div class="home-hero-copy"><div class="eyebrow">${esc(appearance().hero_eyebrow)}</div><h1 id="home-title">${esc(appearance().hero_title)}<br><span>${esc(appearance().hero_highlight)}</span></h1><p class="hero-copy hero-custom-description">${esc(appearance().hero_description)}</p><div class="home-actions"><a class="btn btn-primary" href="/plans">探索观影套餐 ${icon('arrow',17)}</a><a class="btn btn-outline" href="/library">逛逛影视库 ${icon('film',16)}</a></div><div class="home-details"><span>原盘 · RE / REMUX</span><span>多线路支持</span><span>自备网盘 / 免网盘</span></div></div><div class="home-hero-visual"><div id="home-carousel" class="hero-carousel" role="region" aria-roledescription="轮播" aria-label="${esc(appearance().site_name)}光影轮播" tabindex="0">${homeCarouselMarkup()}</div></div></section>`;
 }
 function homeServiceLinks() {
   return `<section class="home-service-links" aria-label="快捷入口"><a class="home-service-link" href="/library"><small>01 / LIBRARY</small><h2>今晚，从哪部开始？</h2><p>浏览影视库，发现感兴趣的电影与剧集。</p><span class="action-label">逛逛影视库 ${icon('arrow',16)}</span></a><a class="home-service-link" href="/discover"><small>02 / DISCOVER</small><h2>好故事，值得继续期待。</h2><p>搜索想看的影片，提交申请或连接用户中心订阅。</p><span class="action-label">订阅与找片 ${icon('arrow',16)}</span></a><a class="home-service-link" href="/status"><small>03 / STATUS</small><h2>每一条线路，都有状态。</h2><p>查看 CDN 响应、源站与线路机监测。</p><span class="action-label">查看服务状态 ${icon('arrow',16)}</span></a></section>`;
@@ -369,6 +396,12 @@ function updatePublicNavigation(active) {
   page.querySelector('.site-footer').outerHTML=footer();
 }
 async function loadHomeFeatured(root) {
+  const custom=array(appearance().hero_images).filter(item=>decorationImage(item.url)).slice(0,6);
+  if(custom.length){
+    root.innerHTML=homeCarouselMarkup(custom.map(item=>({poster_url:decorationImage(item.url),title:item.title,description:item.subtitle,kicker:appearance().site_name})),false);
+    const attribution=document.getElementById('home-carousel-source');if(attribution)attribution.hidden=true;
+    root.setAttribute('aria-busy','false');window.MediaDockCarousel?.start(root);return;
+  }
   root.setAttribute('aria-busy','true');
   const fallback=document.getElementById('home-carousel-source');
   if(fallback){fallback.hidden=false;fallback.textContent='正在读取本周热门影片…';}
@@ -394,7 +427,7 @@ async function loadHomeFeatured(root) {
 }
 async function renderMediaPage(kind) {
   window.MediaDockCarousel?.stop();stopShopNetworkMonitor();window.MediaDockMedia?.stop();
-  document.title=`${kind==='library'?'影视库':'订阅找片'} · 影视服 MediaDock`;
+  document.title=(kind==='library'?'影视库':'订阅找片')+' · '+appearance().site_name;
   app.innerHTML=`<div class="container ${kind==='library'?'library-page':'discover-page'}">${header(kind)}${window.MediaDockMedia?.markup(kind)||'<main class="page-center"><p>页面暂时无法加载，请刷新重试。</p></main>'}${footer()}</div>`;
   const page=app.firstElementChild;
   window.MediaDockMedia?.mount(kind);
@@ -402,14 +435,14 @@ async function renderMediaPage(kind) {
 }
 async function renderGuide() {
   window.MediaDockCarousel?.stop();stopShopNetworkMonitor();
-  document.title='使用教程 · 影视服 MediaDock';
-  app.innerHTML=`<div class="container guide-page">${header('guide')}${window.MediaDockGuide?.markup({userCenterUrl:safeUrl(state.catalog?.redemption_url)})||'<main class="page-center"><h1>使用教程</h1><p>教程暂时无法加载，请刷新页面。</p></main>'}${footer()}</div>`;
+  document.title='使用教程 · '+appearance().site_name;
+  app.innerHTML=`<div class="container guide-page">${header('guide')}${window.MediaDockGuide?.markup({userCenterUrl:safeUrl(state.catalog?.redemption_url),guide:state.catalog?.guide})||'<main class="page-center"><h1>使用教程</h1><p>教程暂时无法加载，请刷新页面。</p></main>'}${footer()}</div>`;
   const page=app.firstElementChild;
-  try {const catalog=await api('/api/public/catalog',{timeout:10000});if(page.isConnected){state.catalog=catalog;page.querySelector('.site-header').outerHTML=header('guide');page.querySelector('.site-footer').outerHTML=footer();const main=page.querySelector('main');if(window.MediaDockGuide && main)main.outerHTML=window.MediaDockGuide.markup({userCenterUrl:safeUrl(catalog.redemption_url)});}}catch{}
+  try {const catalog=await api('/api/public/catalog',{timeout:10000});if(page.isConnected){state.catalog=catalog;page.querySelector('.site-header').outerHTML=header('guide');page.querySelector('.site-footer').outerHTML=footer();const main=page.querySelector('main');if(window.MediaDockGuide && main)main.outerHTML=window.MediaDockGuide.markup({userCenterUrl:safeUrl(catalog.redemption_url),guide:catalog.guide});}}catch{}
 }
 async function renderServiceStatus() {
   window.MediaDockCarousel?.stop();stopShopNetworkMonitor();
-  document.title='服务状态 · 影视服 MediaDock';
+  document.title='服务状态 · '+appearance().site_name;
   app.innerHTML=`<div class="container status-page">${header('status')}<main>${shopNetworkSection()}</main>${footer()}</div>`;
   const page=app.firstElementChild;
   startShopNetworkMonitor();
@@ -418,7 +451,7 @@ async function renderServiceStatus() {
 async function renderShop() {
   const generation=++publicOrderGeneration;
   window.MediaDockCarousel?.stop();stopShopNetworkMonitor();
-  document.title='影视服 · 观影服务平台';
+  updateSiteTitle();
   const parameters=new URLSearchParams(location.search),orderId=parameters.get('order'),reviewId=parameters.get('review');
   if(orderId || reviewId){
     try{const catalog=await api('/api/public/catalog');if(generation!==publicOrderGeneration)return;state.catalog=catalog;}catch{}
@@ -435,7 +468,7 @@ async function renderShop() {
 }
 async function renderPlans() {
   window.MediaDockCarousel?.stop();stopShopNetworkMonitor();
-  document.title='观影套餐 · 影视服 MediaDock';state.filter='all';
+  document.title='观影套餐 · '+appearance().site_name;state.filter='all';
   app.innerHTML=`<div class="container storefront-page plans-page">${header('plans')}<main><section id="plans" aria-label="观影套餐"><p class="micro" role="status">正在读取观影套餐…</p></section><div id="plans-how"></div></main>${footer()}</div>`;
   const page=app.firstElementChild;
   try {
@@ -471,7 +504,7 @@ async function renderPurchaseReview(id, initial) {
   if(generation!==publicOrderGeneration)return;
   const product=array(state.catalog?.products).find(p=>p.id===(review?.product_id||initial?.product_id));
   const message=review?.status==='approved' ? '订单审核已通过，请回到原闲鱼会话查看交付进度。若此前已发卡，可直接查看原消息。' : review?.status==='rejected' ? '暂未核实到相符的交易，请在原闲鱼会话联系卖家核对订单和套餐。' : '申请已进入闲鱼订单审核。卖家核对实付订单后，通过原闲鱼会话交付；无需在这里重复付款。';
-  document.title='闲鱼订单审核 · 影视服 MediaDock';
+  document.title='闲鱼订单审核 · '+appearance().site_name;
   const shopUrl = state.catalog?.xianyu_store_url;
   app.innerHTML=`<div class="container">${header()}<main class="page-center"><section class="claim-card purchase-review-status"><div class="claim-icon">${icon('order',26)}</div><div class="eyebrow">XIANYU ORDER REVIEW</div><h1>${review ? purchaseReviewStatus(review.status)[0] : '查询审核进度'}</h1><p class="subtitle">闲鱼购买 · 卖家核对 · 原会话交付</p>${failure ? `<div class="callout danger">${icon('info',16)}<span>${esc(failure)}</span></div>` : ''}<div class="key-value"><span>审核申请号</span><strong class="order-id">${esc(id)}</strong></div>${product ? `<div class="key-value"><span>所选套餐</span><strong>${esc(productTitle(product))}</strong></div>` : ''}${review ? `<div class="key-value"><span>当前状态</span>${purchaseReviewBadge(review.status)}</div><div class="callout mt-24">${icon('info',16)}<span>${message}</span></div>` : ''}${token ? `<div class="inline-actions mt-24"><button class="btn btn-secondary" data-action="refresh-purchase-review" data-id="${esc(id)}">${icon('refresh',15)}刷新审核进度</button>${shopUrl ? `<a class="btn btn-outline" href="${esc(shopUrl)}" target="_blank" rel="noopener noreferrer">前往闲鱼 ${icon('external',14)}</a>` : ''}</div><p class="micro mt-18">请保存本页地址和查询凭证，以便再次查询进度。</p><details class="mt-12"><summary class="micro">保存审核查询凭证</summary><div class="card-code token-code mt-12">${esc(token)}</div><button class="btn btn-outline btn-small mt-12" data-action="copy" data-copy="${esc(token)}">复制查询凭证</button></details>` : `<form id="purchase-review-access-form" data-id="${esc(id)}"><label class="field mt-24"><span>审核查询凭证</span><input name="token" required maxlength="128" autocomplete="off" placeholder="粘贴提交审核时保存的查询凭证"></label><p class="form-error" role="alert"></p><button class="btn btn-primary btn-full" type="submit">查询审核进度</button></form>`}</section></main>${footer()}</div>`;
 }
@@ -495,7 +528,7 @@ async function renderPublicOrder(id, initial) {
   const claimUrl = claimToken ? `/claim#${encodeURIComponent(claimToken)}` : safeUrl(order?.claim_url);
   const qr = state.catalog?.payment_qr || {};
   const qrHtml = ['wechat','alipay'].map(key => safeUrl(qr[key],{local:true}) ? `<div class="payment-qr"><img src="${esc(safeUrl(qr[key],{local:true}))}" alt="${key === 'wechat' ? '微信' : '支付宝'}收款码"><p class="micro mt-12">${key === 'wechat' ? '微信支付' : '支付宝'}</p></div>` : '').join('');
-  document.title = '订单详情 · 影视服 MediaDock';
+  document.title='订单详情 · '+appearance().site_name;
   app.innerHTML = `<div class="container">${header()}<main class="page-center"><section class="claim-card"><div class="claim-icon">${icon('order',26)}</div><div class="eyebrow">YOUR ORDER</div><h1>${token ? '订单已登记' : '查询你的订单'}</h1><p class="subtitle">付款核对与卡密领取进度，都在这里。</p>${order?.error ? `<div class="callout danger">${icon('info',16)}<span>${esc(order.error)}</span></div>` : ''}<div class="key-value"><span>订单号</span><strong class="order-id">${esc(id)}</strong></div>${product ? `<div class="key-value"><span>所选套餐</span><strong>${esc(productTitle(product))}</strong></div><div class="key-value"><span>应付金额</span><strong>¥${money(product.listed_price_cents)}</strong></div>` : ''}${order?.status ? `<div class="key-value"><span>当前状态</span>${badge(order.status)}</div>` : ''}${token ? `<div class="callout mt-24">${icon('info',16)}<span>${['issued','ready','delivered','claimed'].includes(order?.status) ? '卡密已经准备好，请通过领取入口查看。' : '登记订单不代表已经付款。付款后需要管理员核对到账，才会生成对应卡密。'}</span></div>${qrHtml && ['pending_payment','pending_review','payment_reported','awaiting_review'].includes(order?.status) ? `<div class="inline-actions mt-24">${qrHtml}</div><p class="micro mt-12">付款请备注订单号，完成后提交付款说明。</p>` : ''}${!state.catalog?.payment_configured ? '<p class="micro mt-18">网页收款方式待配置，请勿向来源不明的收款码转账。可通过闲鱼购买。</p>' : ''}${claimUrl ? `<a class="btn btn-primary btn-full mt-24" href="${esc(claimUrl)}">领取我的卡密 ${icon('key',16)}</a>` : ''}${['pending_payment','pending_review','payment_reported','awaiting_review'].includes(order?.status) && state.catalog?.payment_configured ? `<form id="paid-notice-form" data-id="${esc(id)}"><label class="field mt-24"><span>付款说明</span><textarea name="payment_note" maxlength="240" required placeholder="支付方式、时间及交易单号末几位，方便核对"></textarea></label><p class="form-error" id="paid-error" role="alert"></p><button class="btn btn-secondary btn-full" type="submit">我已付款，提交核对</button><p class="micro mt-12">此操作仅提交付款说明，等待管理员核对到账。</p></form>` : ''}<div class="inline-actions mt-24"><button class="btn btn-outline" data-action="refresh-public-order" data-id="${esc(id)}">${icon('refresh',15)}刷新状态</button><button class="btn btn-outline" data-action="copy" data-copy="${esc(id)}">${icon('copy',15)}复制订单号</button></div><p class="micro mt-18">请保存本页地址及查询凭证。关闭标签页或更换浏览器后，可能需要重新输入凭证。</p><details class="mt-12"><summary class="micro">保留订单查询凭证</summary><p class="micro mt-12">换浏览器查询时使用，请妥善保存并勿公开分享。</p><div class="card-code token-code mt-12">${esc(token)}</div><button class="btn btn-outline btn-small mt-12" data-action="copy" data-copy="${esc(token)}">复制查询凭证</button></details>` : `<form id="order-access-form" data-id="${esc(id)}"><label class="field mt-24"><span>订单查询凭证</span><input name="token" autocomplete="off" required placeholder="粘贴创建订单时保存的查询凭证"></label><button class="btn btn-primary btn-full" type="submit">查询订单</button></form>`}</section></main>${footer()}</div>`;
 }
 function readClaimHash() { const value = location.hash.slice(1); try { return decodeURIComponent(value.startsWith('token=') ? value.slice(6) : value); } catch { return value; } }
@@ -505,7 +538,7 @@ async function renderClaim() {
     try { state.catalog = await api('/api/public/catalog', {timeout:10000}); }
     catch { /* Card lookup remains available if the catalog cannot be loaded. */ }
   }
-  document.title = '领取卡密 · 影视服 MediaDock';
+  document.title='领取卡密 · '+appearance().site_name;
   const token = readClaimHash();
   app.innerHTML = `<div class="container">${header('claim')}<main class="page-center"><section class="claim-card" id="claim-content"><div class="claim-icon">${icon('key',27)}</div><div class="eyebrow">A LITTLE LIGHT, RESERVED FOR YOU</div><h1>你的观影时光，已在路上</h1><p class="subtitle">输入订单的领取凭证，查看属于你的卡密。<br>如果你收到的是领取链接，凭证已自动填入。</p><form id="claim-form"><label class="field"><span>领取凭证</span><textarea name="token" autocomplete="off" spellcheck="false" required placeholder="粘贴领取链接中的凭证，或完整领取链接">${esc(token)}</textarea></label><p class="form-error" id="claim-error" role="alert"></p><button class="btn btn-primary btn-full" type="submit">查看我的卡密 ${icon('arrow',16)}</button></form><div class="callout mt-24">${icon('shield',16)}<span>领取凭证是你的取卡凭据，请勿公开分享。卡密准备完成后，可用同一凭证再次查看。</span></div><p class="micro mt-18">尚未付款或正在核对的订单，需要等待处理完成。<br>已有卡密的用户可直接前往用户中心兑换。</p>${userCenterLink('已有卡密，前往用户中心', 'btn btn-secondary btn-full mt-18')}</section></main>${footer()}</div>`;
 }
@@ -517,13 +550,13 @@ function claimSuccess(data) {
 async function renderAdmin() {
   window.MediaDockSubscriptions?.stopAdmin();
   stopShopNetworkMonitor();
-  document.title = '管理控制台 · 影视服 MediaDock';
+  document.title='管理控制台 · '+appearance().site_name;
   try { state.auth = await api('/api/auth/status'); if (!state.auth.authenticated) return renderAuth(); await refreshOverview(); renderAdminShell(); }
   catch (error) { app.innerHTML = `<div class="container"><main class="page-center">${empty(errorText(error),'管理服务暂时不可用','<button class="btn btn-secondary" data-action="reload">重新连接</button>')}</main></div>`; }
 }
 function renderAuth() {
   const setup = !state.auth.initialized;
-  app.innerHTML = `<main class="auth-wrap"><section class="auth-story"><a href="/">${brand()}</a><div><div class="eyebrow">MediaDock BUSINESS CONSOLE</div><h2>每一份期待，<br>都值得被好好交付。</h2><p>管理你的套餐、订单与发卡流程。<br>从购卡到交付，在一处从容完成。</p></div><span class="auth-story-footer">影视服 MediaDock · 管理控制台</span></section><section class="auth-content"><div class="auth-card"><a href="/">${brand()}</a><div class="eyebrow">${setup ? 'WELCOME TO MediaDock' : 'WELCOME BACK'}</div><h1>${setup ? '设置你的管理密码' : '欢迎回到影视服'}</h1><p class="subtitle">${setup ? '首次使用，请创建管理员密码。此密码仅用于当前发卡网站。' : '登录后查看订单、核对付款与管理发卡。'}</p><form id="auth-form" data-mode="${setup ? 'setup' : 'login'}"><label class="field"><span>管理员用户名</span><input type="text" name="username" autocomplete="username" maxlength="64" ${setup ? 'value="admin" readonly' : ''} required placeholder="请输入管理员用户名"></label><label class="field"><span>管理密码</span><input type="password" name="password" autocomplete="${setup ? 'new-password' : 'current-password'}" ${setup ? 'minlength="12"' : ''} maxlength="256" required placeholder="${setup ? '至少 12 位，建议使用独立密码' : '请输入管理密码'}"></label>${setup ? '<label class="field"><span>再次输入密码</span><input type="password" name="confirmation" autocomplete="new-password" required minlength="12" maxlength="256" placeholder="再次确认密码"></label>' : ''}<p class="form-error" id="auth-error" role="alert"></p><button type="submit" class="btn btn-primary btn-full">${setup ? '创建密码并进入' : '登录控制台'} ${icon('arrow',16)}</button></form><a class="back-shop" href="/">${icon('arrow',13)} 返回购卡首页</a></div></section></main>`;
+  app.innerHTML = `<main class="auth-wrap"><section class="auth-story"><a href="/">${brand()}</a><div><div class="eyebrow">MediaDock BUSINESS CONSOLE</div><h2>每一份期待，<br>都值得被好好交付。</h2><p>管理你的套餐、订单与发卡流程。<br>从购卡到交付，在一处从容完成。</p></div><span class="auth-story-footer">${esc(appearance().site_name)} · 管理控制台</span></section><section class="auth-content"><div class="auth-card"><a href="/">${brand()}</a><div class="eyebrow">${setup ? 'WELCOME TO MediaDock' : 'WELCOME BACK'}</div><h1>${setup ? '设置你的管理密码' : '欢迎回到'+esc(appearance().site_name)}</h1><p class="subtitle">${setup ? '首次使用，请创建管理员密码。此密码仅用于当前发卡网站。' : '登录后查看订单、核对付款与管理发卡。'}</p><form id="auth-form" data-mode="${setup ? 'setup' : 'login'}"><label class="field"><span>管理员用户名</span><input type="text" name="username" autocomplete="username" maxlength="64" ${setup ? 'value="admin" readonly' : ''} required placeholder="请输入管理员用户名"></label><label class="field"><span>管理密码</span><input type="password" name="password" autocomplete="${setup ? 'new-password' : 'current-password'}" ${setup ? 'minlength="12"' : ''} maxlength="256" required placeholder="${setup ? '至少 12 位，建议使用独立密码' : '请输入管理密码'}"></label>${setup ? '<label class="field"><span>再次输入密码</span><input type="password" name="confirmation" autocomplete="new-password" required minlength="12" maxlength="256" placeholder="再次确认密码"></label>' : ''}<p class="form-error" id="auth-error" role="alert"></p><button type="submit" class="btn btn-primary btn-full">${setup ? '创建密码并进入' : '登录控制台'} ${icon('arrow',16)}</button></form><a class="back-shop" href="/">${icon('arrow',13)} 返回购卡首页</a></div></section></main>`;
 }
 async function refreshOverview() { state.overview = await api('/api/admin/overview'); state.overview.products = array(state.overview.products); state.overview.orders = array(state.overview.orders); }
 const navItems = [['overview','grid','概览'],['orders','order','订单管理'],['delivery','key','发卡'],['subscriptions','order','订阅审核'],['settings','settings','设置']];
@@ -570,7 +603,7 @@ function updateOrderNavigation() {
 let assistantLoadTimer;
 function renderAdminShell() {
   clearTimeout(assistantLoadTimer);
-  app.innerHTML = `<div class="admin-layout"><aside class="sidebar"><a href="/">${brand()}</a><div class="sidebar-label">WORKSPACE</div><nav class="admin-nav" aria-label="管理导航">${adminNavigation()}</nav><div class="sidebar-bottom"><a href="/" target="_blank" rel="noopener">${icon('external',16)}<span>查看买家页面</span></a><button data-action="logout">${icon('logout',16)}<span>退出登录</span></button></div></aside><main class="admin-main"><div class="admin-topbar"><span class="breadcrumb">MediaDock <span>/</span> 管理控制台</span><a href="/" class="mobile-admin-title">MediaDock</a><span class="workspace-pill"><i class="dot"></i> 发卡管理工作台</span></div><div id="admin-content"></div></main></div>`; renderAdminTab();
+  app.innerHTML = `<div class="admin-layout"><aside class="sidebar"><a href="/">${brand()}</a><div class="sidebar-label">WORKSPACE</div><nav class="admin-nav" aria-label="管理导航">${adminNavigation()}</nav><div class="sidebar-bottom"><a href="/" target="_blank" rel="noopener">${icon('external',16)}<span>查看买家页面</span></a><button data-action="logout">${icon('logout',16)}<span>退出登录</span></button></div></aside><main class="admin-main"><div class="admin-topbar"><span class="breadcrumb">${esc(appearance().site_name)} <span>/</span> 管理控制台</span><a href="/" class="mobile-admin-title">${esc(appearance().site_name)}</a><div class="admin-theme-tools">${window.MediaDockTheme?.control()||''}<span class="workspace-pill"><i class="dot"></i> 发卡管理工作台</span></div></div><div id="admin-content"></div></main></div>`; renderAdminTab();
 }
 function renderAdminTab() {
   window.MediaDockSubscriptions?.stopAdmin();
@@ -882,9 +915,39 @@ async function openPublicIntroduction() {
   try {const catalog=await api('/api/public/catalog',{timeout:15000});state.catalog=catalog;showIntroduction();}
   catch(error){toast(errorText(error),true);}
 }
+const settingsCategories = [['site','站点与入口'],['payment','网页收款'],['services','服务接入'],['announcement','首页公告与海报'],['guide','使用教程'],['network','线路监测']];
+function settingsForm(name, content) {
+  return `<form id="settings-${name}-form" data-settings-form class="panel"><section class="settings-section">${content}<section class="settings-section"><p class="form-error" role="alert"></p><div class="inline-actions"><span class="micro">更改仅在保存后生效。</span><button class="btn btn-primary" type="submit">保存设置 ${icon('check',16)}</button></div></section></form>`;
+}
+function selectSettingsCategory(category, focus = false) {
+  if(!settingsCategories.some(([id])=>id===category))return;
+  state.settingsCategory=category;
+  document.querySelectorAll('[data-settings-category]').forEach(panel=>{panel.hidden=panel.dataset.settingsCategory!==category;});
+  document.querySelectorAll('[data-action="settings-category"]').forEach(button=>{
+    const active=button.dataset.category===category;
+    button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;
+    if(active && focus)button.focus();
+  });
+}
+document.addEventListener('keydown',event=>{
+  const button=event.target.closest?.('[data-action="settings-category"]');
+  if(!button || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+  event.preventDefault();
+  const ids=settingsCategories.map(([id])=>id),index=ids.indexOf(button.dataset.category);
+  const next=event.key==='Home'?0:event.key==='End'?ids.length-1:(index+(event.key==='ArrowRight'?1:-1)+ids.length)%ids.length;
+  selectSettingsCategory(ids[next],true);
+});
 function settingsPage() {
   const settings=state.overview.settings||{};
-  return `${pageTitle('设置','配置兑换入口、买家访问地址与服务连接。')}<div class="settings-width"><form id="settings-form" class="panel"><section class="settings-section"><h2>买家访问与兑换</h2><p class="subtitle">买家领取卡密后，前往用户中心登录、兑换与管理账号。</p><label class="field"><span>用户中心 / 卡密兑换地址</span><input type="url" name="redemption_url" value="${esc(settings.redemption_url||'')}" placeholder="https://user.example.com/"><small>用于网站用户中心入口及闲鱼发卡文案，填写买家可以访问的地址。</small></label><label class="field"><span>闲鱼店铺地址（选填）</span><input type="url" name="xianyu_store_url" value="${esc(settings.xianyu_store_url||'')}" placeholder="https://你的店铺地址"><small>未填写时页面不会显示闲鱼外链，请填写你自己的店铺地址。</small></label><label class="field"><span>发卡网站公开地址</span><input type="url" name="public_base_url" required ${settings.public_base_url_managed?'readonly':''} value="${esc(settings.public_base_url||'')}" placeholder="https://你的发卡网站域名"><small>${settings.public_base_url_managed?'此地址由服务器部署配置管理。':'用于生成买家领取链接。默认地址仅供本机预览，外部买家无法访问 localhost。'}</small></label></section><section class="settings-section"><h2>NextEmby 接口</h2><p class="subtitle">智能体密钥保存在服务端受保护的凭据存储中，页面不会回显已有密钥。</p><label class="field"><span>更新智能体密钥 <span class="micro">（选填）</span></span><input type="password" name="nextemby_token" autocomplete="new-password" placeholder="留空保留现有密钥"><small>使用 NextEmby 管理后台中的智能体接口密钥。</small></label><div class="inline-actions"><span class="setting-state">当前状态：${connectionStatus(state.overview.connections?.nextemby)}</span><button class="btn btn-outline btn-small" data-action="check-nextemby" type="button">${icon('refresh',13)}只读检查连接</button></div></section><section class="settings-section"><h2>网页收款码</h2><p class="subtitle">支持微信与支付宝，可稍后设置。保存后买家可在订单页看到收款码，付款仍需人工核对。</p><div class="two-col"><label class="field"><span>微信收款码图片地址</span><input name="payment_wechat_url" value="${esc(settings.payment_wechat_url||'')}" placeholder="https://… 或 /static/…"><small>仅支持 HTTPS 图片或本站静态图片。</small></label><label class="field"><span>支付宝收款码图片地址</span><input name="payment_alipay_url" value="${esc(settings.payment_alipay_url||'')}" placeholder="https://… 或 /static/…"><small>留空表示暂不启用该收款方式。</small></label></div></section><section class="settings-section"><p class="form-error" id="settings-error" role="alert"></p><div class="inline-actions"><span class="micro">更改仅在保存后生效。</span><button class="btn btn-primary" type="submit">保存设置 ${icon('check',16)}</button></div></section></form><section class="panel network-settings-panel"><div class="settings-section"><h2>影视库与订阅找片</h2><p class="subtitle">选择允许客户浏览的 Emby 媒体库，并连接 NextFind 搜片。访客想看申请经后台审核后订阅；用户中心客户沿用原有订阅规则。</p><div class="inline-actions"><button type="button" class="btn btn-outline btn-small" data-action="media-settings" data-kind="emby">${icon('film',15)}配置 Emby 片库</button><button type="button" class="btn btn-outline btn-small" data-action="media-settings" data-kind="nextfind">${icon('search',15)}配置 NextFind</button></div></div></section>${introductionSettingsPanel()}<section class="panel network-settings-panel"><div class="settings-section"><h2>首页热门海报</h2><p class="subtitle">每天 06:10 更新热门影片资料与图片，图片通过本站加载。未启用时不展示轮播图片。</p><button type="button" class="btn btn-outline btn-small" data-action="featured-settings">${icon('film',15)}配置热门海报</button></div></section><section class="panel network-settings-panel"><div class="settings-section"><h2>线路监测</h2><p class="subtitle">CDN 可由买家浏览器测速；源站与线路机读取探针在线状态和平均延迟，也可由服务端监测。每分钟更新。</p><div class="callout network-settings-privacy">${icon('shield',17)}<span>浏览器测速地址会公开给买家浏览器，页面仅显示别名；源站、线路机和其他服务端探测地址仍仅管理员可见。</span></div><p class="micro network-settings-help">每个节点可选买家浏览器测速、服务端 HTTP / HTTPS、Ping（ICMP）或妙妙屋 X 探针。分组和项目可自由添加、删除及修改标题；探针真实名称只在下方选择器中显示。各类耗时来源不同，不代表完整播放体验。</p><section class="network-probe-connection"><h3>妙妙屋 X 探针接入</h3><p class="micro">连接后，从节点列表选择要展示的探针。读取在线状态和探针上报的平均延迟，不会修改探针或服务器设置。</p><div id="network-probe-settings"><p class="micro" role="status">正在读取探针连接…</p></div></section><div id="network-monitor-settings"><p class="micro" role="status">正在读取监测设置…</p></div></div></section><button class="btn btn-outline mt-24" data-action="logout">${icon('logout',15)}退出管理员登录</button></div>`;
+  const panels={
+    site:(window.MediaDockAppearanceEditor?.panel(settings.appearance)||'')+settingsForm('site', `<h2>买家访问与兑换</h2><p class="subtitle">买家领取卡密后，前往用户中心登录、兑换与管理账号。</p><label class="field"><span>用户中心 / 卡密兑换地址</span><input type="url" name="redemption_url" value="${esc(settings.redemption_url||'')}" placeholder="https://user.example.com/"><small>用于网站用户中心入口及闲鱼发卡文案，填写买家可以访问的地址。</small></label><label class="field"><span>闲鱼店铺地址（选填）</span><input type="url" name="xianyu_store_url" value="${esc(settings.xianyu_store_url||'')}" placeholder="https://你的店铺地址"><small>未填写时页面不会显示闲鱼外链，请填写你自己的店铺地址。</small></label><label class="field"><span>发卡网站公开地址</span><input type="url" name="public_base_url" required ${settings.public_base_url_managed?'readonly':''} value="${esc(settings.public_base_url||'')}" placeholder="https://你的发卡网站域名"><small>${settings.public_base_url_managed?'此地址由服务器部署配置管理。':'用于生成买家领取链接。默认地址仅供本机预览，外部买家无法访问 localhost。'}</small></label></section>`),
+    payment:settingsForm('payment', `<h2>网页收款码</h2><p class="subtitle">支持微信与支付宝，可稍后设置。保存后买家可在订单页看到收款码，付款仍需人工核对。</p><div class="two-col"><label class="field"><span>微信收款码图片地址</span><input name="payment_wechat_url" value="${esc(settings.payment_wechat_url||'')}" placeholder="https://… 或 /static/…"><small>仅支持 HTTPS 图片或本站静态图片。</small></label><label class="field"><span>支付宝收款码图片地址</span><input name="payment_alipay_url" value="${esc(settings.payment_alipay_url||'')}" placeholder="https://… 或 /static/…"><small>留空表示暂不启用该收款方式。</small></label></div></section>`),
+    services:settingsForm('services', `<h2>NextEmby 接口</h2><p class="subtitle">智能体密钥保存在服务端受保护的凭据存储中，页面不会回显已有密钥。</p><label class="field"><span>更新智能体密钥 <span class="micro">（选填）</span></span><input type="password" name="nextemby_token" autocomplete="new-password" placeholder="留空保留现有密钥"><small>使用 NextEmby 管理后台中的智能体接口密钥。</small></label><div class="inline-actions"><span class="setting-state">当前状态：${connectionStatus(state.overview.connections?.nextemby)}</span><button class="btn btn-outline btn-small" data-action="check-nextemby" type="button">${icon('refresh',13)}只读检查连接</button></div></section>`)+`<section class="panel network-settings-panel"><div class="settings-section"><h2>影视库与订阅找片</h2><p class="subtitle">选择允许客户浏览的 Emby 媒体库，并连接 NextFind 搜片。访客想看申请经后台审核后订阅；用户中心客户沿用原有订阅规则。</p><div class="inline-actions"><button type="button" class="btn btn-outline btn-small" data-action="media-settings" data-kind="emby">${icon('film',15)}配置 Emby 片库</button><button type="button" class="btn btn-outline btn-small" data-action="media-settings" data-kind="nextfind">${icon('search',15)}配置 NextFind</button></div></div></section>`,
+    announcement:introductionSettingsPanel()+`<section class="panel network-settings-panel"><div class="settings-section"><h2>首页热门海报</h2><p class="subtitle">每天 06:10 更新热门影片资料与图片，图片通过本站加载。未启用时不展示轮播图片。</p><button type="button" class="btn btn-outline btn-small" data-action="featured-settings">${icon('film',15)}配置热门海报</button></div></section>`,
+    guide:window.MediaDockGuideEditor?.panel(settings.guide)||'<p>教程编辑器加载失败，请刷新重试。</p>',
+    network:`<section class="panel network-settings-panel"><div class="settings-section"><h2>线路监测</h2><p class="subtitle">CDN 可由买家浏览器测速；源站与线路机读取探针在线状态和平均延迟，也可由服务端监测。每分钟更新。</p><div class="callout network-settings-privacy">${icon('shield',17)}<span>浏览器测速地址会公开给买家浏览器，页面仅显示别名；源站、线路机和其他服务端探测地址仍仅管理员可见。</span></div><p class="micro network-settings-help">每个节点可选买家浏览器测速、服务端 HTTP / HTTPS、Ping（ICMP）或妙妙屋 X 探针。分组和项目可自由添加、删除及修改标题；探针真实名称只在下方选择器中显示。各类耗时来源不同，不代表完整播放体验。</p><section class="network-probe-connection"><h3>妙妙屋 X 探针接入</h3><p class="micro">连接后，从节点列表选择要展示的探针。读取在线状态和探针上报的平均延迟，不会修改探针或服务器设置。</p><div id="network-probe-settings"><p class="micro" role="status">正在读取探针连接…</p></div></section><div id="network-monitor-settings"><p class="micro" role="status">正在读取监测设置…</p></div></div></section>`
+  };
+  return `${pageTitle('设置','按分类管理站点、收款、服务和页面内容。')}<div class="settings-width settings-categories"><div class="settings-category-tabs" role="tablist" aria-label="设置分类">${settingsCategories.map(([id,label])=>`<button type="button" id="settings-tab-${id}" role="tab" aria-controls="settings-panel-${id}" aria-selected="${state.settingsCategory===id}" tabindex="${state.settingsCategory===id?0:-1}" data-action="settings-category" data-category="${id}">${label}</button>`).join('')}</div>${settingsCategories.map(([id])=>`<div role="tabpanel" id="settings-panel-${id}" aria-labelledby="settings-tab-${id}" data-settings-category="${id}" ${state.settingsCategory===id?'':'hidden'}>${panels[id]}</div>`).join('')}<button class="btn btn-outline mt-24" data-action="logout">${icon('logout',15)}退出管理员登录</button></div>`;
 }
 function purchaseReviewDetail(id) {
   const review=array(state.overview?.purchase_reviews).find(r=>r.request_id===id);if(!review)return toast('审核申请不存在，请刷新订单列表。',true);
@@ -967,6 +1030,7 @@ function featuredSettingsModal(result) {
 document.addEventListener('click', async event => {
   const button=event.target.closest('[data-action]'); if(!button) return;
   const action=button.dataset.action;
+  if(action==='user-center-unconfigured') return toast('用户中心暂未配置，请联系站点管理员获取入口。');
   if(action==='close-modal') return closeModal();
   if(action==='show-introduction') return openPublicIntroduction();
   if(action==='intro-preview') {const form=button.closest('form');if(form.reportValidity())showIntroduction(false,introductionFormValue(form),true);return;}
@@ -981,6 +1045,7 @@ document.addEventListener('click', async event => {
   if(action==='purchase-review-detail') return purchaseReviewDetail(button.dataset.id);
   if(action==='refresh-purchase-review') {const release=busy(button);try{await renderPurchaseReview(button.dataset.id);}finally{release();}return;}
   if(action==='filter') { state.filter=button.dataset.filter; document.querySelectorAll('[data-action="filter"]').forEach(el=>{el.classList.toggle('active',el===button);el.setAttribute('aria-pressed',String(el===button));});const products=document.getElementById('products');products.classList.toggle('filtered',state.filter!=='all');products.innerHTML=productCards();return; }
+  if(action==='settings-category') return selectSettingsCategory(button.dataset.category);
   if(action==='admin-tab') { if(button.dataset.tab==='orders')return selectOrderSource('all');if(button.dataset.tab==='xianyu'){state.deliveryView='settings';return selectDelivery('delivery-channel','xianyu');}state.tab=button.dataset.tab;renderAdminTab();return; }
   if(['delivery-view','delivery-channel','delivery-stage'].includes(action)) return selectDelivery(action,button.dataset.view||button.dataset.source||button.dataset.stage);
   if(action==='order-source') return selectOrderSource(button.dataset.source);
@@ -1002,7 +1067,7 @@ document.addEventListener('click', async event => {
     else if(action==='refresh-assistant-config') {await refreshOverview();renderAdminTab();}
     else if(action==='refresh-order-detail') await refreshAfterAction(button.dataset.id);
     else if(action==='refresh-public-order') await renderPublicOrder(button.dataset.id);
-    else if(action==='check-nextemby') {const result=await api('/api/admin/nextemby/check',{method:'POST',body:{}});await refreshOverview();renderAdminTab();toast(result.message||'只读连接检查已完成');}
+    else if(action==='check-nextemby') {const result=await api('/api/admin/nextemby/check',{method:'POST',body:{}});await refreshOverview();if(state.tab==='settings'){const status=document.querySelector('#settings-services-form .setting-state');if(status)status.innerHTML='当前状态：'+connectionStatus(state.overview.connections?.nextemby);}else renderAdminTab();toast(result.message||'只读连接检查已完成');}
     else if(action==='issue') {
       if(!window.confirm('将实际调用 NextEmby，为此订单生成 1 张卡密。请确认订单套餐和到账核对无误。继续生成？')) return;
       try {await api(`/api/admin/orders/${encodeURIComponent(button.dataset.id)}/issue`,{method:'POST',body:{}});await refreshAfterAction(button.dataset.id);toast('卡密生成完成，请查看发货内容。');}
@@ -1067,16 +1132,25 @@ document.addEventListener('submit',async event=>{
     else if(form.id==='featured-movies-form'){
       try {const result=await api('/api/admin/featured-movies',{method:'POST',body:{enabled:values.enabled==='true',token:values.token||'',clear_token:values.clear_token==='on'}});if(form.isConnected)featuredSettingsModal(result);toast('热门海报配置已保存');}finally{form.elements.token.value='';}
     }
+    else if(form.id==='appearance-form'){
+      const result=await api('/api/admin/settings',{method:'POST',body:{appearance:window.MediaDockAppearanceEditor.value(form)}});
+      state.overview.settings=result.settings;applyAppearance(result.settings.appearance);
+      toast('页面装修已保存，前台刷新后即可看到。');
+    }
+    else if(form.id==='guide-form'){
+      const result=await api('/api/admin/settings',{method:'POST',body:{guide:window.MediaDockGuideEditor.value(form)}});
+      state.overview.settings=result.settings;if(state.catalog)state.catalog.guide=result.settings.guide;toast('使用教程已保存，前台刷新后即可看到。');
+    }
     else if(form.id==='introduction-form'){
       const result=await api('/api/admin/settings',{method:'POST',body:{introduction:introductionFormValue(form)}});
       state.overview.settings=result.settings;
       if(state.catalog)state.catalog.introduction=result.settings.introduction;
       toast('首页公告已保存。');
     }
-    else if(form.id==='settings-form'){
+    else if(form.matches('[data-settings-form]')){
       if(!values.nextemby_token)delete values.nextemby_token;
       for(const field of ['payment_wechat_url','payment_alipay_url'])if(values[field] && !(values[field].startsWith('/static/') || /^https:\/\//i.test(values[field])))throw new Error('收款码图片仅支持 HTTPS 地址或 /static/ 开头的本站路径。');
-      await api('/api/admin/settings',{method:'POST',body:values});form.elements.nextemby_token.value='';await refreshOverview();renderAdminTab();toast('设置已保存。');
+      const result=await api('/api/admin/settings',{method:'POST',body:values});state.overview.settings=result.settings;if(form.elements.nextemby_token)form.elements.nextemby_token.value='';toast('设置已保存。');
     }
   }catch(error){if(errorEl?.isConnected)errorEl.textContent=errorText(error);else toast(errorText(error),true);}
   finally{release();}
@@ -1101,5 +1175,5 @@ async function logoutFromAssistant() {
 }
 window.addEventListener('popstate',()=>{closeModal();start();});
 window.addEventListener('hashchange',()=>{if(location.pathname==='/claim')renderClaim();else if(location.pathname==='/' && location.hash==='#network')location.replace('/status');else if(location.pathname==='/' && location.hash==='#plans' && !new URLSearchParams(location.search).get('order'))start();});
-function start(){window.MediaDockSubscriptions?.stopAdmin();publicOrderGeneration++;if(location.pathname==='/' && location.hash==='#plans' && !new URLSearchParams(location.search).get('order'))history.replaceState(null,'','/plans');window.MediaDockMedia?.stop();window.MediaDockCarousel?.stop();if(location.pathname==='/plans' || location.pathname==='/plans/')return renderPlans();if(location.pathname==='/library' || location.pathname==='/library/')return renderMediaPage('library');if(location.pathname==='/discover' || location.pathname==='/discover/')return renderMediaPage('discovery');if(location.pathname==='/' && location.hash==='#network')return location.replace('/status');if(location.pathname==='/status' || location.pathname==='/status/')return renderServiceStatus();if(location.pathname==='/guide' || location.pathname==='/guide/')return renderGuide();if(['/admin','/admin/'].includes(location.pathname)){if(new URLSearchParams(location.search).get('logout')==='1')return logoutFromAssistant();return renderAdmin();}if(location.pathname.startsWith('/claim'))return renderClaim();return renderShop();}
+async function start(){await loadAppearance();window.MediaDockSubscriptions?.stopAdmin();publicOrderGeneration++;if(location.pathname==='/' && location.hash==='#plans' && !new URLSearchParams(location.search).get('order'))history.replaceState(null,'','/plans');window.MediaDockMedia?.stop();window.MediaDockCarousel?.stop();if(location.pathname==='/plans' || location.pathname==='/plans/')return renderPlans();if(location.pathname==='/library' || location.pathname==='/library/')return renderMediaPage('library');if(location.pathname==='/discover' || location.pathname==='/discover/')return renderMediaPage('discovery');if(location.pathname==='/' && location.hash==='#network')return location.replace('/status');if(location.pathname==='/status' || location.pathname==='/status/')return renderServiceStatus();if(location.pathname==='/guide' || location.pathname==='/guide/')return renderGuide();if(['/admin','/admin/'].includes(location.pathname)){if(new URLSearchParams(location.search).get('logout')==='1')return logoutFromAssistant();return renderAdmin();}if(location.pathname.startsWith('/claim'))return renderClaim();return renderShop();}
 start();

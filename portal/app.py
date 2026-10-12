@@ -1,4 +1,6 @@
 """影视服购卡与管理入口。正式付款与卡密副作用均由受认证操作驱动。"""
+import html
+from appearance import config as appearance_config, upload as appearance_upload
 import base64
 import hashlib
 import hmac
@@ -76,6 +78,34 @@ def introduction_config(value=None, strict=False):
         raise APIError('公告正文合计不能超过 16000 字')
     return {'entry_label': text(value.get('entry_label', INTRODUCTION_DEFAULT['entry_label']), '入口名称', 24), 'enabled': enabled, 'title': text(value.get('title', INTRODUCTION_DEFAULT['title']), '公告标题', 120),
             'subtitle': text(value.get('subtitle', INTRODUCTION_DEFAULT['subtitle']), '公告说明', 240, False), 'sections': clean}
+
+
+def guide_config(value=None, strict=False):
+    """Public plain-text replacements for the built-in tutorial, never HTML."""
+    if value is None and not strict:
+        return {'texts': {}}
+    if not isinstance(value, dict):
+        raise APIError('使用教程需要使用正确的配置格式')
+    if strict and set(value) != {'texts'}:
+        raise APIError('使用教程包含不支持的字段')
+    texts = value.get('texts', {})
+    if not isinstance(texts, dict) or len(texts) > 400:
+        raise APIError('使用教程最多支持 400 个文字项')
+    clean = {}
+    for key, text in texts.items():
+        if not isinstance(key, str) or not re.fullmatch(r'(heading|library|plans|purchase|claim|client|status|faq)-t[0-9]{1,3}', key):
+            if strict:
+                raise APIError('使用教程包含不支持的文字项')
+            continue
+        if not isinstance(text, str):
+            raise APIError('教程内容必须是文字')
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+        if len(text) > 5000 or any((ord(c) < 32 and c not in '\n\t') or ord(c) == 127 for c in text):
+            raise APIError('教程文字过长或包含不支持的控制字符')
+        clean[key] = text
+    if sum(len(text) for text in clean.values()) > 24000:
+        raise APIError('教程自定义文字合计不能超过 24000 字')
+    return {'texts': clean}
 
 
 def deployment_flag(name):
@@ -174,6 +204,14 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
         result['public_base_url'] = public_base_url(public_override or result['public_base_url'], require_https)
         result['public_base_url_managed'] = bool(public_override)
         result['introduction'] = introduction_config(result.get('introduction'))
+        try:
+            result['guide'] = guide_config(result.get('guide'))
+        except APIError:
+            result['guide'] = guide_config()
+        try:
+            result['appearance'] = appearance_config(result.get('appearance'))
+        except ValueError:
+            result['appearance'] = appearance_config()
         return result
 
     settings()  # Fail closed on unsafe deployment URLs before serving requests.
@@ -290,7 +328,7 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
                 return JSONResponse({'error': {'message': '不接受跨站请求', 'code': 'invalid_origin'}}, status_code=403)
             if 'application/json' not in request.headers.get('content-type', ''):
                 return JSONResponse({'error': {'message': '请求需要 JSON 格式', 'code': 'invalid_content_type'}}, status_code=415)
-            body_limit = MAX_CONFIG_BYTES if request.method == 'POST' and request.url.path == '/api/admin/network-monitor' else (131072 if request.method == 'POST' and request.url.path == '/api/admin/settings' else 32768)
+            body_limit = 3000000 if request.method == 'POST' and request.url.path == '/api/admin/appearance-assets' else MAX_CONFIG_BYTES if request.method == 'POST' and request.url.path == '/api/admin/network-monitor' else (131072 if request.method == 'POST' and request.url.path == '/api/admin/settings' else 32768)
             try:
                 if int(request.headers.get('content-length', '0')) > body_limit:
                     return JSONResponse({'error': {'message': '请求过大', 'code': 'too_large'}}, status_code=413)
@@ -407,10 +445,33 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
         response.delete_cookie(COOKIE, httponly=True, samesite='strict', secure=request.url.scheme == 'https')
         return response
 
+    @app.get('/api/public/appearance')
+    def public_appearance():
+        return settings()['appearance']
+
+    @app.post('/api/admin/appearance-assets')
+    def upload_appearance(request: Request, body: dict):
+        admin(request)
+        try:
+            with control.lock:
+                return appearance_upload(body, data_dir / 'appearance-assets')
+        except ValueError as error:
+            raise APIError(str(error))
+
+    @app.get('/api/public/appearance-assets/{name}')
+    def appearance_asset(name: str):
+        if not re.fullmatch(r'[a-f0-9]{64}\.(png|jpg|webp)', name):
+            return Response(status_code=404)
+        path = data_dir / 'appearance-assets' / name
+        if not path.is_file():
+            return Response(status_code=404)
+        mime = {'png':'image/png','jpg':'image/jpeg','webp':'image/webp'}[name.rsplit('.',1)[1]]
+        return FileResponse(path, media_type=mime, headers={'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'})
+
     @app.get('/api/public/catalog')
     def public_catalog():
         s = settings()
-        return {'products': catalog(), 'payment_configured': bool(s['payment_wechat_url'] or s['payment_alipay_url']), 'payment_qr': {'wechat': s['payment_wechat_url'], 'alipay': s['payment_alipay_url']}, 'redemption_url': s['redemption_url'], 'customer_center_url': s['redemption_url'], 'xianyu_store_url': s['xianyu_store_url'], 'introduction': introduction_config(s['introduction'])}
+        return {'products': catalog(), 'payment_configured': bool(s['payment_wechat_url'] or s['payment_alipay_url']), 'payment_qr': {'wechat': s['payment_wechat_url'], 'alipay': s['payment_alipay_url']}, 'redemption_url': s['redemption_url'], 'customer_center_url': s['redemption_url'], 'xianyu_store_url': s['xianyu_store_url'], 'introduction': introduction_config(s['introduction']), 'guide': guide_config(s['guide']), 'appearance': s['appearance']}
 
     @app.get('/api/public/network-status')
     def public_network_status():
@@ -640,6 +701,13 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
 
     def save_settings(body):
         s = settings()
+        if 'appearance' in body:
+            try:
+                s['appearance'] = appearance_config(body['appearance'], s['appearance'])
+            except ValueError as error:
+                raise APIError(str(error))
+        if 'guide' in body:
+            s['guide'] = guide_config(body['guide'], strict=True)
         if 'introduction' in body:
             introduction_config(body['introduction'], strict=True)
             s['introduction'] = introduction_config({**s['introduction'], **body['introduction']}, strict=True)
@@ -786,7 +854,13 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
     @app.get('/claim')
     @app.get('/admin')
     def page():
-        return FileResponse(ROOT / 'static/index.html')
+        a = settings()['appearance']
+        markup = (ROOT / 'static/index.html').read_text()
+        markup = re.sub(r'<title>.*?</title>', lambda _: '<title>'+html.escape(a['site_name']+' · '+a['site_description'])+'</title>', markup)
+        markup = re.sub(r'<meta name="description" content="[^"]*">', lambda _: '<meta name="description" content="'+html.escape(a['site_description'], quote=True)+'">', markup)
+        if a['favicon_url']:
+            markup = re.sub(r'<link rel="icon"[^>]*>', lambda _: '<link rel="icon" href="'+html.escape(a['favicon_url'], quote=True)+'">', markup)
+        return Response(markup, media_type='text/html', headers={'Cache-Control':'no-store'})
 
     @app.get('/admin/')
     def admin_page_redirect():

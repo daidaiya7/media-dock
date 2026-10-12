@@ -1,0 +1,103 @@
+name: Build release images
+on:
+  push:
+    branches: ['codex/release-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read release version
+        run: |
+          version=$(cat VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mediadock" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build compiled image and verify application
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: mediadock-release-check:${{ env.VERSION }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+          provenance: false
+          sbom: false
+      - name: Verify non-root runtime and isolated Compose startup
+        env:
+          MEDIADOCK_IMAGE: mediadock-release-check:${{ env.VERSION }}
+        run: |
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:size=64m,mode=1777 \
+            --entrypoint python -v "$PWD/scripts/release-smoke.py:/checks/release-smoke.py:ro" \
+            "$MEDIADOCK_IMAGE" /checks/release-smoke.py /app
+          docker compose -p release-image-smoke up -d --pull never
+          for attempt in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:59189/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:59189/health
+          curl -fsS http://127.0.0.1:59189/api/public/appearance | python -c 'import json,sys; a=json.load(sys.stdin); assert a["site_name"]=="影视服" and a["theme_mode"]=="auto"'
+          curl -fsS http://127.0.0.1:59189/static/theme.js >/dev/null
+          docker compose -p release-image-smoke ps --format json | python -c 'import json,sys; rows=[json.loads(x) for x in sys.stdin if x.strip()]; assert len(rows)==2 and all(r["State"]=="running" for r in rows),rows'
+      - name: Clean isolated smoke environment
+        if: always()
+        run: docker compose -p release-image-smoke down -v
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push architecture image and create offline copy
+        run: |
+          docker tag "mediadock-release-check:$VERSION" "$IMAGE:$VERSION-${{ matrix.arch }}"
+          docker push "$IMAGE:$VERSION-${{ matrix.arch }}"
+          docker tag "mediadock-release-check:$VERSION" "$IMAGE:$VERSION"
+          mkdir -p dist
+          docker save "$IMAGE:$VERSION" | gzip -1 > "dist/mediadock-$VERSION-linux-${{ matrix.arch }}.tar.gz"
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS-${{ matrix.arch }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-image-${{ matrix.arch }}
+          path: dist/*
+          compression-level: 0
+          retention-days: 7
+  manifest:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multi-platform manifest
+        run: |
+          version=$(cat VERSION)
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mediadock"
+          docker buildx imagetools create -t "$image:$version" -t "$image:latest" "$image:$version-amd64" "$image:$version-arm64"
+          docker buildx imagetools inspect "$image:$version"
+          echo "Published $image:$version for linux/amd64 and linux/arm64." >> "$GITHUB_STEP_SUMMARY"
