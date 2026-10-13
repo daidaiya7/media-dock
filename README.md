@@ -22,7 +22,6 @@
 
 默认套餐是禁用的示例配置，集成服务尚未连接。请完成初始化与配置后再开放给用户。
 
-这个主要是给自己的服搭建用的，借鉴了 [Christ9038/Ydisks-Xianyu-Helper](https://github.com/Christ9038/Ydisks-Xianyu-Helper)，然后自己加了些东西，有不好用的可以联系我 TG 机器人：@MUGLOWUserBot
 ## Docker 快速启动
 
 准备支持 Docker Compose v2 的 Linux 主机或 Docker Desktop。维护者从本源码目录构建镜像：
