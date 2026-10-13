@@ -68,7 +68,7 @@ docker compose up -d
 
 公开页面：`/` 首页、`/library` 影视库、`/discover` 求片、`/plans` 套餐、`/guide` 教程、`/status` 状态、`/claim` 领取。后台为 `/admin`。
 
-各项服务和凭据的填写位置见 [配置清单](docs/CONFIGURATION.md)。使用说明、备份和故障排查见 [使用指南](docs/USAGE.md)。源码构建、镜像发行和安全边界见 [发行说明](docs/PRIVATE-DISTRIBUTION.md)。
+各项服务和凭据的填写位置见 [配置清单](docs/CONFIGURATION.md)。使用说明、备份和故障排查见 [使用指南](docs/USAGE.md)。源码构建、镜像发行和安全边界见 [发行说明](docs/DISTRIBUTION.md)。
 
 ## 文件与数据
 
