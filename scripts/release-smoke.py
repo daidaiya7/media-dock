@@ -113,6 +113,23 @@ with tempfile.TemporaryDirectory(prefix='mediadock-release-check-') as temporary
             check(response.status_code == 200 and not response.headers['content-type'].startswith('text/html'), 'Static asset failed: ' + asset)
     with TestClient(create_app(data_dir, vault), base_url='http://127.0.0.1:59189') as client:
         check(client.get('/api/public/catalog').json()['guide'] == guide, 'Settings persistence failed')
+    from core import Store, ConflictError, load_products
+    from cryptography.fernet import Fernet
+    products = load_products(ROOT / 'product-mapping.json')
+    ledger = Store(directory / 'manual-check.sqlite3', Fernet.generate_key(), products)
+    ledger.create_order('RELEASE-CHECK', 'free_trial', 'direct', 'manual')
+    ledger.approve_order('RELEASE-CHECK', 'Isolated payment verification')
+    check(ledger.mark_manual('RELEASE-CHECK', 'generated')['status'] == 'manual_issued', 'Compiled manual mark failed')
+    check(ledger.mark_manual('RELEASE-CHECK', 'delivered')['status'] == 'manual_delivered', 'Compiled manual delivery failed')
+    class NeverGenerate:
+        def generate(self, product):
+            raise AssertionError('Manual mark must never generate a card')
+    try:
+        ledger.issue_order('RELEASE-CHECK', NeverGenerate(), products)
+        raise AssertionError('Manual order was allowed to issue again')
+    except ConflictError:
+        pass
+    check(ledger.unmark_manual('RELEASE-CHECK')['status'] == 'eligible', 'Compiled manual undo failed')
     scheduler = modules['_mediadock_scheduler']
     check(callable(scheduler.main), 'Scheduler entrypoint is unavailable')
     check(not scheduler.refresh_due({'enabled': False}, dt.datetime.now(dt.timezone.utc)), 'Scheduler disabled case failed')
