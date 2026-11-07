@@ -5,12 +5,14 @@
 
   function panel(config = {}) {
     const texts = config?.texts || {};
-    return `<form id="guide-form" class="panel guide-editor"><section class="settings-section"><h2>使用教程</h2><p class="subtitle">按章节编辑现有教程的标题、说明、推荐软件和常见问题。原有目录、重点样式与连接图解会保留。</p><p class="micro">展开章节后修改文字，预览满意后保存。内容公开给所有访客，请勿填写密码、密钥或内部服务地址。</p><label class="field mt-18"><span>查找教程内容</span><input type="search" data-guide-search placeholder="输入软件名称或关键词，例如 Infuse、端口"><small>搜索只筛选编辑项，不会改动已输入的内容。</small></label><div class="guide-editor-chapters">${groups().map((group,index)=>`<details class="guide-editor-chapter" ${index===0?'open':''}><summary>${escape(group.title)}<span>${group.fields.length} 项文字</span></summary><div class="guide-editor-fields">${group.fields.map((field,i)=>{const current=typeof texts[field.key]==='string'?texts[field.key]:field.defaultValue;return `<label class="field"><span>${String(i+1).padStart(2,'0')} · ${escape(field.label)}</span><textarea data-guide-key="${field.key}" maxlength="5000" rows="${field.defaultValue.length>90?4:2}">${escape(current)}</textarea></label>`;}).join('')}</div></details>`).join('')}</div><p class="form-error" role="alert"></p><div class="inline-actions guide-editor-actions"><button type="button" class="btn btn-outline" data-guide-action="preview">预览教程</button><button type="button" class="btn btn-outline" data-guide-action="reset">恢复默认文字</button><button type="submit" class="btn btn-primary">保存教程</button></div><p class="micro guide-editor-feedback" role="status">修改仅在保存后发布；恢复默认也需要保存。</p><div class="guide-editor-preview" hidden><div class="guide-editor-preview-heading"><strong>未保存内容预览</strong><button type="button" class="btn btn-outline btn-small" data-guide-action="close-preview">收起预览</button></div><div class="guide-page" data-guide-preview></div></div></section></form>`;
+    return `<form id="guide-form" class="panel guide-editor" data-guide-original="${escape(JSON.stringify(texts))}"><section class="settings-section"><h2>使用教程</h2><p class="subtitle">按章节编辑现有教程的标题、说明、推荐软件和常见问题。原有目录、重点样式与连接图解会保留。</p><p class="micro">展开章节后修改文字，预览满意后保存。内容公开给所有访客，请勿填写密码、密钥或内部服务地址。</p><label class="field mt-18"><span>查找教程内容</span><input type="search" data-guide-search placeholder="输入软件名称或关键词，例如 Infuse、端口"><small>搜索只筛选编辑项，不会改动已输入的内容。</small></label><div class="guide-editor-chapters">${groups().map((group,index)=>`<details class="guide-editor-chapter" ${index===0?'open':''}><summary>${escape(group.title)}<span>${group.fields.length} 项文字</span></summary><div class="guide-editor-fields">${group.fields.map((field,i)=>{const current=typeof texts[field.key]==='string'?texts[field.key]:field.defaultValue;return `<label class="field"><span>${String(i+1).padStart(2,'0')} · ${escape(field.label)}</span><textarea data-guide-key="${field.key}" maxlength="5000" rows="${field.defaultValue.length>90?4:2}">${escape(current)}</textarea></label>`;}).join('')}</div></details>`).join('')}</div><p class="form-error" role="alert"></p><div class="inline-actions guide-editor-actions"><button type="button" class="btn btn-outline" data-guide-action="preview">预览教程</button><button type="button" class="btn btn-outline" data-guide-action="reset">恢复默认文字</button><button type="submit" class="btn btn-primary">保存教程</button></div><p class="micro guide-editor-feedback" role="status">修改仅在保存后发布；恢复默认也需要保存。</p><div class="guide-editor-preview" hidden><div class="guide-editor-preview-heading"><strong>未保存内容预览</strong><button type="button" class="btn btn-outline btn-small" data-guide-action="close-preview">收起预览</button></div><div class="guide-page" data-guide-preview></div></div></section></form>`;
   }
 
   function value(form) {
     const defaults = Object.fromEntries(groups().flatMap(group=>group.fields.map(field=>[field.key,field.defaultValue])));
-    const texts = {};
+    let original={};
+    try {original=JSON.parse(form.dataset.guideOriginal||'{}');} catch {}
+    const texts=Object.fromEntries(Object.entries(original).filter(([key,value])=>!Object.hasOwn(defaults,key)&&typeof value==='string'));
     form.querySelectorAll('[data-guide-key]').forEach(input=>{
       const text=input.value.replace(/\r\n?/g,'\n');
       if (text !== defaults[input.dataset.guideKey]) texts[input.dataset.guideKey]=text;
@@ -41,6 +43,7 @@
     const feedback=form.querySelector('.guide-editor-feedback');
     const preview=form.querySelector('.guide-editor-preview');
     if(button.dataset.guideAction==='reset'){
+      form.dataset.guideOriginal='{}';
       const defaults=Object.fromEntries(groups().flatMap(group=>group.fields.map(field=>[field.key,field.defaultValue])));
       form.querySelectorAll('[data-guide-key]').forEach(input=>{input.value=defaults[input.dataset.guideKey];});
       preview.hidden=true;

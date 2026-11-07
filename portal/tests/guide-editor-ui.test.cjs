@@ -52,3 +52,15 @@ test('keyword filtering retains hidden drafts and restores chapters on clear',t=
  search.value='';search.dispatchEvent(new f.w.Event('input',{bubbles:true}));
  assert.equal(form.querySelectorAll('.guide-editor-chapter[hidden]').length,0);
 });
+
+test('unknown saved tutorial keys survive normal save and reset clears them',t=>{
+ const {JSDOM}=require('jsdom');const fs=require('node:fs'),path=require('node:path');
+ const d=new JSDOM('<div id="root"></div>',{runScripts:'outside-only',url:'https://portal.example/'});t.after(()=>d.window.close());
+ for(const file of ['guide.js','guide-editor.js'])d.window.eval(fs.readFileSync(path.join(__dirname,'../static',file),'utf8'));
+ const editor=d.window.MediaDockGuideEditor;
+ d.window.document.querySelector('#root').innerHTML=editor.panel({texts:{'faq-t999':'legacy value'}});
+ const form=d.window.document.querySelector('#guide-form');
+ assert.equal(editor.value(form).texts['faq-t999'],'legacy value');
+ form.querySelector('[data-guide-action="reset"]').click();
+ assert.equal(editor.value(form).texts['faq-t999'],undefined);
+});

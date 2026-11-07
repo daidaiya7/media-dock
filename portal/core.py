@@ -57,6 +57,10 @@ EXPECTED_PRODUCTS = {
 }
 _PROCESS_TOKEN = secrets.token_hex(16)
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
+# Orders handled outside this system (for example a card generated and sent by
+# hand in Xianyu). These states never hold a card and block automatic issuing.
+MANUAL_STATES = {"generated": "manual_issued", "delivered": "manual_delivered"}
+_MANUAL_SOURCES = {"eligible", "needs_review"}
 
 
 def _now() -> str:
@@ -179,6 +183,9 @@ class Store:
             columns = {row[1] for row in db.execute("PRAGMA table_info(orders)")}
             if "channel" not in columns:
                 db.execute("ALTER TABLE orders ADD COLUMN channel TEXT NOT NULL DEFAULT ''")
+            for column in ("manual_prev_status", "manual_note", "manual_marked_at"):
+                if column not in columns:
+                    db.execute(f"ALTER TABLE orders ADD COLUMN {column} TEXT")
             db.commit()
         self.recover_unfinished()
 
@@ -228,6 +235,8 @@ class Store:
             "order_id", "product_id", "delivery_mode", "source", "buyer_note", "status", "created_at",
             "approved_at", "evidence_note", "issue_started_at", "issued_at", "claimed_at", "claim_views", "last_error"
         )}
+        result["manual_note"] = row["manual_note"]
+        result["manual_marked_at"] = row["manual_marked_at"]
         result["product"] = json.loads(row["product_json"])
         result["source"] = row["channel"] or row["source"]
         result["has_card"] = row["card_ciphertext"] is not None
@@ -292,6 +301,8 @@ class Store:
                 raise PaymentRequiredError("请先核验真实付款并确认订单")
             if row["status"] in {"needs_review", "processing"}:
                 raise ReviewRequiredError("该订单正在处理或结果待核实，禁止再次生成卡密")
+            if row["status"] in MANUAL_STATES.values():
+                raise ConflictError("该订单已手动标记为已生成或已发货，不会再次生成卡密")
             if row["status"] != "eligible":
                 raise ConflictError("订单当前状态不能生成卡密")
             snapshot = validate_product(json.loads(row["product_json"]))
@@ -327,6 +338,43 @@ class Store:
                               WHERE order_id=? AND status='processing'""",
                            ("生成结果不确定：请到 NextEmby 核对批次，禁止自动重试。", order_id))
             raise ReviewRequiredError("生成结果待核实；为避免重复发卡，已暂停该订单") from None
+
+    def mark_manual(self, order_id: str, state: str, note: str = "") -> dict:
+        """Record that the card was generated and/or sent outside this system."""
+        if state not in MANUAL_STATES:
+            raise ValidationError("手动标记类型无效")
+        note = _text(note, "处理备注", 240, required=False)
+        target = MANUAL_STATES[state]
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = self._row(db, order_id)
+            current = row["status"]
+            if current == target:
+                return self._public(row)
+            allowed = current in _MANUAL_SOURCES or (current == "manual_issued" and target == "manual_delivered")
+            if not allowed or row["card_ciphertext"] is not None:
+                raise ConflictError("只有可生成卡密、待人工核查或已手动生成的订单可以手动标记")
+            previous = row["manual_prev_status"] if current == "manual_issued" else current
+            db.execute("""UPDATE orders SET status=?,manual_prev_status=?,manual_note=?,manual_marked_at=?
+                          WHERE order_id=? AND status=?""",
+                       (target, previous, note or row["manual_note"], _now(), order_id, current))
+            db.commit()
+            return self._public(self._row(db, order_id))
+
+    def unmark_manual(self, order_id: str) -> dict:
+        """Undo a mistaken manual mark and return to the state before it."""
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = self._row(db, order_id)
+            if row["status"] not in MANUAL_STATES.values():
+                raise ConflictError("该订单没有手动标记，无需撤销")
+            previous = row["manual_prev_status"]
+            if previous not in _MANUAL_SOURCES or row["card_ciphertext"] is not None:
+                raise ConflictError("无法确定标记前的状态，请人工核查")
+            db.execute("""UPDATE orders SET status=?,manual_prev_status=NULL,manual_note=NULL,manual_marked_at=NULL
+                          WHERE order_id=? AND status=?""", (previous, order_id, row["status"]))
+            db.commit()
+            return self._public(self._row(db, order_id))
 
     def recover_unfinished(self) -> int:
         recovered = 0

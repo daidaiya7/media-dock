@@ -619,7 +619,7 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
                 order.update(website_orders[order['order_id']])
                 order['source'] = 'web'  # Normalize legacy website orders without rewriting the ledger.
         counts = Counter(o['status'] for o in orders)
-        return {'products': catalog(True), 'orders': orders, 'purchase_reviews': purchase_reviews.list_admin(), 'stats': {'total': len(orders), 'issued': counts['issued'], 'pending': counts['pending_review'] + counts['eligible'], 'needs_review': counts['needs_review']}, 'connections': {'nextemby': {**app.state.connection, 'configured': bool(vault.get('nextemby'))}, 'xianyu': {'status': 'account_bound' if settings()['xianyu_account_id'] else 'setup_required', 'url': '/xianyu/' if unified_admin else xianyu_admin_url, 'unified_admin': unified_admin}}, 'settings': settings()}
+        return {'products': catalog(True), 'orders': orders, 'purchase_reviews': purchase_reviews.list_admin(), 'stats': {'total': len(orders), 'issued': counts['issued'] + counts['manual_issued'] + counts['manual_delivered'], 'pending': counts['pending_review'] + counts['eligible'], 'needs_review': counts['needs_review']}, 'connections': {'nextemby': {**app.state.connection, 'configured': bool(vault.get('nextemby'))}, 'xianyu': {'status': 'account_bound' if settings()['xianyu_account_id'] else 'setup_required', 'url': '/xianyu/' if unified_admin else xianyu_admin_url, 'unified_admin': unified_admin}}, 'settings': settings()}
 
     @app.post('/api/admin/orders')
     def manual_create(request: Request, body: dict):
@@ -650,6 +650,20 @@ def create_app(data_dir=None, secret_store=None, nextemby_factory=NextEmbyClient
         rate(request, 'issue', 20, 60)
         result = store.issue_order(order_id, client(), products)
         return {k: v for k, v in result.items() if k not in ('card', 'claim_token')}
+
+    @app.post('/api/admin/orders/{order_id}/manual-mark')
+    def manual_mark(order_id: str, request: Request, body: dict):
+        admin(request)
+        state = require_text(body.get('state'), '标记类型', 16)
+        note = require_text(body.get('note', ''), '处理备注', 240, False)
+        with control.lock:
+            return store.mark_manual(order_id, state, note)
+
+    @app.post('/api/admin/orders/{order_id}/manual-unmark')
+    def manual_unmark(order_id: str, request: Request, body: dict):
+        admin(request)
+        with control.lock:
+            return store.unmark_manual(order_id)
 
     @app.post('/api/admin/orders/{order_id}/claim')
     def admin_claim(order_id: str, request: Request, body: dict):

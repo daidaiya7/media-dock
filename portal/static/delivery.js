@@ -5,7 +5,7 @@ const deliveryStages = [
   ['payment','待核款',['pending_review','pending_payment','payment_reported']],
   ['issue','待生成',['eligible','approved']],
   ['processing','生成中',['processing','issuing']],
-  ['issued','已生成',['issued']],
+  ['issued','已生成',['issued','manual_issued','manual_delivered']],
   ['review','需核查',['needs_review','failed']],
 ];
 const deliveryChannels = [['all','全部渠道'],['web','网页'],['xianyu','闲鱼'],['xiaohongshu','小红书'],['manual','手工']];
@@ -21,6 +21,7 @@ function deliveryActionLabel(order) {
   if(['pending_review','pending_payment','payment_reported'].includes(order.status)) return '核对付款';
   if(['eligible','approved'].includes(order.status)) return '生成卡密';
   if(order.status==='issued') return '查看交付';
+  if(['manual_issued','manual_delivered'].includes(order.status)) return '查看手动处理';
   if(['processing','issuing'].includes(order.status)) return '查看进度';
   return '核查订单';
 }
