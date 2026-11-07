@@ -2,9 +2,9 @@
 
 源码保存在公开的 `daidaiya7/media-dock` 仓库；`daidaiya7/media-dock-release` 提供面向部署者的发行资料。两个仓库都不包含生产数据库、实例凭据或业务数据；每位部署者使用自己的数据卷、凭据、账号及媒体服务。
 
-## 1.1.0 发行内容
+## 1.1.1 发行内容
 
-- 容器地址：`ghcr.io/daidaiya7/mediadock:1.1.0`，包含 Linux AMD64、ARM64 架构。
+- 容器地址：`ghcr.io/daidaiya7/mediadock:1.1.1`，包含 Linux AMD64、ARM64 架构。
 - 公开发行页附带同版本离线镜像，可用 `docker load` 导入。
 - `Dockerfile.release` 在构建阶段用 Cython 将后端模块编译为本机扩展；最终阶段只接收编译产物、必要静态资源、运行依赖及许可声明。
 - `scheduler.py` 与 `save_secret.py` 仅是加载编译模块的简短入口，业务逻辑不以应用 `.py` 明文分发。
@@ -16,8 +16,8 @@
 
 ```sh
 docker build -f Dockerfile.release \
-  --build-arg VERSION=1.1.0 --build-arg REVISION="$(git rev-parse HEAD)" \
-  -t mediadock:release-1.1.0 .
+  --build-arg VERSION=1.1.1 --build-arg REVISION="$(git rev-parse HEAD)" \
+  -t mediadock:release-1.1.1 .
 ```
 
 独立的 `Dockerfile.release.dockerignore` 控制构建上下文。构建时检查最终应用文件清单，并验证编译模块导入、管理员初始化/登录、访问限制、外观与教程配置、图片上传和定时任务入口。
@@ -34,7 +34,7 @@ GitHub Actions 的 `Build release images` 工作流在两个架构的原生 runn
 
 为每次发行保留明确版本及镜像摘要，不依赖 `latest` 追踪生产更新。升级前备份数据卷与秘密卷，保留原 Compose 项目名和 `.env`。不要执行 `docker compose down -v`。
 
-回滚通常只需要恢复之前的 `MEDIADOCK_IMAGE` 并重新启动；若后续版本包含数据库迁移，应按该版本说明恢复配套备份。1.1.0 的新增外观和教程配置兼容原有数据，不迁移或删除订单。
+回滚通常只需要恢复之前的 `MEDIADOCK_IMAGE` 并重新启动；若后续版本包含数据库迁移，应按该版本说明恢复配套备份。1.1.1 会为订单新增三个手动处理记录字段，不删除已有订单。旧版本不识别手动处理状态；使用过手动标记后，不应直接降级并继续发卡。回退前核对订单及交付记录，避免恢复旧账本覆盖升级后的订单。
 
 ## 许可与边界
 

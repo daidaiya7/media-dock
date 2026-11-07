@@ -98,4 +98,4 @@ Compose 通常为卷名称添加项目名前缀。迁移时同时保留两个卷
 
 ## Version
 
-Current release: `1.1.0`.
+Current release: `1.1.1`.
